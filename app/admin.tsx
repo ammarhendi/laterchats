@@ -47,7 +47,7 @@ function timeUntilExpiry(date: Date | string): string {
 
 export default function AdminScreen() {
   const router = useRouter();
-  const { users, nickname, clearAllMessages } = useChat();
+  const { users, nickname, roomName, myRole, clearAllMessages } = useChat();
   const [generatedToken, setGeneratedToken] = useState<string | null>(null);
   const [generatedExpiry, setGeneratedExpiry] = useState<Date | null>(null);
   const [copied, setCopied] = useState(false);
@@ -67,6 +67,10 @@ export default function AdminScreen() {
   });
 
   const handleGenerate = () => {
+    if (myRole !== "super_admin" && myRole !== "moderator") {
+      Alert.alert("Access Denied", "Only admins can generate invite links.");
+      return;
+    }
     generateMutation.mutate({ adminPin: "later2024" });
   };
 
@@ -111,7 +115,7 @@ export default function AdminScreen() {
             <Text style={styles.sectionTitle}>Room Status</Text>
             <View style={styles.statusRow}>
               <View style={styles.statusDot} />
-              <Text style={styles.statusText}>Now — Active</Text>
+              <Text style={styles.statusText}>{roomName ?? "Now"} — Active</Text>
             </View>
             <Text style={styles.statusSub}>{users.length} user{users.length !== 1 ? "s" : ""} currently in room</Text>
             {users.length > 0 && (

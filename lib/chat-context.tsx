@@ -45,6 +45,7 @@ interface ChatContextType {
   requireSuperAdminAuth: boolean;
   superAdminPasswordSet: boolean;
   joinRoom: (nickname: string, roomId: number, token?: string) => void;
+  switchRoom: (roomId: number) => void;
   authenticateSuperAdmin: (password: string, isSetup: boolean) => void;
   leaveRoom: () => void;
   // Messaging
@@ -288,6 +289,19 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     }
   }, [initSocket, setNickname]);
 
+  const switchRoom = useCallback((newRoomId: number) => {
+    const sock = socketRef.current;
+    if (!sock || !sock.connected) return;
+    // Clear messages and users for the new room immediately
+    setMessages([]);
+    setPrivateMessages({});
+    setUnreadPMs({});
+    setIncomingPM(null);
+    setUsers([]);
+    // Use the dedicated switch_room event (no reconnect needed)
+    sock.emit("switch_room", { roomId: newRoomId });
+  }, []);
+
   const authenticateSuperAdmin = useCallback((password: string, isSetup: boolean) => {
     const rId = pendingRoomIdRef.current ?? 1;
     socketRef.current?.emit("super_admin_auth", { password, isSetup, roomId: rId });
@@ -328,24 +342,18 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
   const clearMessages = useCallback(() => setMessages([]), []);
 
-  const clearAllMessages = useCallback(async () => {
-    // Clear locally immediately for instant feedback
-    setMessages([]);
-    try {
-      const apiBase = getApiBaseUrl();
-      const res = await fetch(`${apiBase}/api/clear-room`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: "ammar_clear_2024" }),
-      });
-      const data = await res.json();
-      if (!data.success) {
-        Alert.alert("Error", data.error || "Failed to clear chat on server");
-      }
-    } catch (e) {
-      // Already cleared locally, server sync failed silently
-      console.error("[clearAllMessages] fetch error:", e);
+  const clearAllMessages = useCallback(() => {
+    const sock = socketRef.current;
+    if (!sock || !sock.connected) {
+      Alert.alert("Error", "Not connected to server");
+      return;
     }
+    // Use socket clear_room — server deletes from DB and broadcasts room_cleared to ALL users in the room
+    sock.emit("clear_room", (result: { success: boolean; message?: string }) => {
+      if (!result?.success) {
+        Alert.alert("Error", result?.message || "Failed to clear chat");
+      }
+    });
   }, []);
 
   // Admin actions
@@ -408,6 +416,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         requireSuperAdminAuth,
         superAdminPasswordSet,
         joinRoom,
+        switchRoom,
         authenticateSuperAdmin,
         leaveRoom,
         sendMessage,

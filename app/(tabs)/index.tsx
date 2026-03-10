@@ -156,7 +156,7 @@ export default function WelcomeScreen() {
     const nick = nicknameInput.trim();
     if (!nick) { setError("Please enter a nickname"); return; }
     if (nick.length < 2) { setError("Nickname must be at least 2 characters"); return; }
-    if (nick.toLowerCase() === SUPER_ADMIN_NICKNAME.toLowerCase()) {
+    if (SUPER_ADMIN_NICKNAMES.some(n => n.toLowerCase() === nick.toLowerCase())) {
       setError("This nickname is reserved.");
       return;
     }
@@ -208,7 +208,7 @@ export default function WelcomeScreen() {
     if (age < 18) {
       setError("You must be 18 or older to register."); return;
     }
-    if (username.toLowerCase() === SUPER_ADMIN_NICKNAME.toLowerCase()) {
+    if (SUPER_ADMIN_NICKNAMES.some(n => n.toLowerCase() === username.toLowerCase())) {
       setError("This username is reserved."); return;
     }
     if (username.length < 3) { setError("Username must be at least 3 characters"); return; }
@@ -240,14 +240,9 @@ export default function WelcomeScreen() {
   };
 
   const handleRoomSelect = (selectedRoomId: number) => {
-    if (SUPER_ADMIN_NICKNAMES.some(n => n.toLowerCase() === pendingNickname.toLowerCase())) {
-      // Super admin: trigger auth flow with the selected room
-      joinRoom(SUPER_ADMIN_NICKNAME, selectedRoomId);
-      // Modal will show via useEffect when requireSuperAdminAuth becomes true
-    } else {
-      joinRoom(pendingNickname, selectedRoomId);
-      // Navigation happens automatically via useEffect when room_joined fires and sets roomId
-    }
+    // For super admin: server will emit require_super_admin_auth, modal shows via useEffect
+    // For regular users: server emits room_joined, navigation happens via useEffect
+    joinRoom(pendingNickname, selectedRoomId);
   };
 
   const handleAdminAuth = () => {
@@ -266,8 +261,11 @@ export default function WelcomeScreen() {
 
   const handleSuperAdminJoin = () => {
     setError("");
-    // Show room selection first, then auth will trigger after room is selected
-    setPendingNickname(SUPER_ADMIN_NICKNAME);
+    // Use the typed nickname if it's a super admin name, otherwise default to "Ammar"
+    const superNick = SUPER_ADMIN_NICKNAMES.some(n => n.toLowerCase() === nicknameInput.trim().toLowerCase())
+      ? nicknameInput.trim()
+      : SUPER_ADMIN_NICKNAME;
+    setPendingNickname(superNick);
     setScreen("rooms");
   };
 
@@ -286,9 +284,12 @@ export default function WelcomeScreen() {
     return (
       <ScreenContainer containerClassName="bg-black" className="bg-black">
         <View style={styles.roomsHeader}>
-          <TouchableOpacity style={styles.backBtn} onPress={() => setScreen("auth")}>
-            <Text style={styles.backBtnText}>← Back</Text>
-          </TouchableOpacity>
+          {/* Only show back button for non-super-admin users */}
+          {!SUPER_ADMIN_NICKNAMES.some(n => n.toLowerCase() === pendingNickname.toLowerCase()) && (
+            <TouchableOpacity style={styles.backBtn} onPress={() => setScreen("auth")}>
+              <Text style={styles.backBtnText}>← Back</Text>
+            </TouchableOpacity>
+          )}
           <Text style={styles.roomsTitle}>Choose a Room</Text>
           <Text style={styles.roomsSubtitle}>Welcome, {pendingNickname}! Pick a room to join.</Text>
         </View>
@@ -318,6 +319,56 @@ export default function WelcomeScreen() {
             ) : null
           }
         />
+
+        {/* Super Admin Auth Modal — must be here so it shows on the rooms screen */}
+        <Modal visible={showAdminAuth} transparent animationType="fade" onRequestClose={() => { setShowAdminAuth(false); setAdminPassword(""); setAdminConfirmPassword(""); setError(""); }}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalBox}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalCrown}>👑</Text>
+                <Text style={styles.modalTitle}>
+                  {isSetup ? "Set Super Admin Password" : "Super Admin Login"}
+                </Text>
+              </View>
+              <Text style={styles.modalSubtitle}>
+                {isSetup
+                  ? `Welcome, ${pendingNickname}! Set your password to secure your Super Admin account.`
+                  : "Enter your Super Admin password to continue."}
+              </Text>
+              <TextInput
+                style={styles.modalInput}
+                value={adminPassword}
+                onChangeText={setAdminPassword}
+                placeholder="Password"
+                placeholderTextColor="#666"
+                secureTextEntry
+                autoCapitalize="none"
+                returnKeyType={isSetup ? "next" : "done"}
+                onSubmitEditing={isSetup ? undefined : handleAdminAuth}
+              />
+              {isSetup && (
+                <TextInput
+                  style={styles.modalInput}
+                  value={adminConfirmPassword}
+                  onChangeText={setAdminConfirmPassword}
+                  placeholder="Confirm Password"
+                  placeholderTextColor="#666"
+                  secureTextEntry
+                  autoCapitalize="none"
+                  returnKeyType="done"
+                  onSubmitEditing={handleAdminAuth}
+                />
+              )}
+              {error ? <Text style={styles.errorText}>{error}</Text> : null}
+              <TouchableOpacity style={styles.modalBtn} onPress={handleAdminAuth} activeOpacity={0.8}>
+                <Text style={styles.modalBtnText}>{isSetup ? "Set Password & Enter" : "Login"}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalCancel} onPress={() => { setShowAdminAuth(false); setAdminPassword(""); setAdminConfirmPassword(""); setError(""); setScreen("auth"); setPendingNickname(""); }}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
       </ScreenContainer>
     );
   }
@@ -528,55 +579,6 @@ export default function WelcomeScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* Super Admin Auth Modal */}
-      <Modal visible={showAdminAuth} transparent animationType="fade" onRequestClose={() => setShowAdminAuth(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalBox}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalCrown}>👑</Text>
-              <Text style={styles.modalTitle}>
-                {isSetup ? "Set Super Admin Password" : "Super Admin Login"}
-              </Text>
-            </View>
-            <Text style={styles.modalSubtitle}>
-              {isSetup
-                ? "Welcome, Ammar! Set your password to secure your Super Admin account."
-                : "Enter your Super Admin password to continue."}
-            </Text>
-            <TextInput
-              style={styles.modalInput}
-              value={adminPassword}
-              onChangeText={setAdminPassword}
-              placeholder="Password"
-              placeholderTextColor="#666"
-              secureTextEntry
-              autoCapitalize="none"
-              returnKeyType={isSetup ? "next" : "done"}
-              onSubmitEditing={isSetup ? undefined : handleAdminAuth}
-            />
-            {isSetup && (
-              <TextInput
-                style={styles.modalInput}
-                value={adminConfirmPassword}
-                onChangeText={setAdminConfirmPassword}
-                placeholder="Confirm Password"
-                placeholderTextColor="#666"
-                secureTextEntry
-                autoCapitalize="none"
-                returnKeyType="done"
-                onSubmitEditing={handleAdminAuth}
-              />
-            )}
-            {error ? <Text style={styles.errorText}>{error}</Text> : null}
-            <TouchableOpacity style={styles.modalBtn} onPress={handleAdminAuth} activeOpacity={0.8}>
-              <Text style={styles.modalBtnText}>{isSetup ? "Set Password & Enter" : "Login"}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.modalCancel} onPress={() => { setShowAdminAuth(false); setAdminPassword(""); setAdminConfirmPassword(""); setError(""); }}>
-              <Text style={styles.modalCancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </ScreenContainer>
   );
 }

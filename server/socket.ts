@@ -35,6 +35,7 @@ interface ActiveUser {
 }
 
 const activeUsers = new Map<string, ActiveUser>(); // socketId -> user
+const pendingSuperAdminNicknames = new Map<string, string>(); // socketId -> pending nickname
 
 function getRoomUsers(roomId: number) {
   return Array.from(activeUsers.values())
@@ -82,8 +83,9 @@ export function initSocketServer(httpServer: HttpServer) {
       try {
         // Block reserved super admin nicknames from being used by others
         if (isSuperAdminNickname(nickname)) {
+          // Store the pending nickname so super_admin_auth can use it
+          pendingSuperAdminNicknames.set(socket.id, nickname);
           // The actual super admin will authenticate separately via "super_admin_auth"
-          // Here we just block the join until auth is confirmed
           socket.emit("require_super_admin_auth", {
             isPasswordSet: await isSuperAdminPasswordSet(),
           });
@@ -195,12 +197,16 @@ export function initSocketServer(httpServer: HttpServer) {
             socket.emit("super_admin_auth_result", { success: false, message: "Incorrect password" });
             return;
           }
-          socket.emit("super_admin_auth_result", { success: true, message: "Welcome, Ammar!" });
+          const pendingNick = pendingSuperAdminNicknames.get(socket.id) ?? SUPER_ADMIN_NICKNAME;
+          socket.emit("super_admin_auth_result", { success: true, message: `Welcome, ${pendingNick}!` });
         }
 
         // Now join the room as super admin
+        // Use the nickname the user typed (Ammar or Later), fallback to SUPER_ADMIN_NICKNAME
+        const superAdminNick = pendingSuperAdminNicknames.get(socket.id) ?? SUPER_ADMIN_NICKNAME;
+        pendingSuperAdminNicknames.delete(socket.id);
         const existingUser = Array.from(activeUsers.values()).find(
-          (u) => u.nickname === SUPER_ADMIN_NICKNAME && u.roomId === roomId
+          (u) => isSuperAdminNickname(u.nickname) && u.roomId === roomId
         );
         if (existingUser) {
           socket.emit("error", { message: "Super admin is already in the room" });
@@ -209,7 +215,7 @@ export function initSocketServer(httpServer: HttpServer) {
 
         const user: ActiveUser = {
           socketId: socket.id,
-          nickname: SUPER_ADMIN_NICKNAME,
+          nickname: superAdminNick,
           roomId,
           isMuted: true,
           isVoiceActive: false,
@@ -225,7 +231,7 @@ export function initSocketServer(httpServer: HttpServer) {
         const roomUsers = getRoomUsers(roomId);
         const roomRecord2 = await getRoomById(roomId);
         const roomName2 = roomRecord2?.name ?? "Now";
-        socket.emit("room_joined", { roomId, roomName: roomName2, nickname: SUPER_ADMIN_NICKNAME, users: roomUsers });
+        socket.emit("room_joined", { roomId, roomName: roomName2, nickname: superAdminNick, users: roomUsers });
 
         const db = await getDb();
         if (db) {
@@ -237,7 +243,7 @@ export function initSocketServer(httpServer: HttpServer) {
           id: Date.now(),
           roomId,
           senderNickname: "system",
-          content: `${SUPER_ADMIN_NICKNAME} has entered the room. 👑`,
+          content: `${superAdminNick} has entered the room. 👑`,
           type: "system" as const,
           createdAt: new Date(),
         };
@@ -625,6 +631,68 @@ export function initSocketServer(httpServer: HttpServer) {
       } catch (err) {
         console.error("[Socket] clear_room error:", err);
         if (ack) ack({ success: false, message: "Failed to clear chat: " + (err as Error).message });
+      }
+    });
+
+    // ── Switch room (without disconnecting) ──────────────────────────────────
+    socket.on("switch_room", async ({ roomId: newRoomId }: { roomId: number }) => {
+      const user = activeUsers.get(socket.id);
+      if (!user) return;
+      const oldRoomId = user.roomId;
+      if (oldRoomId === newRoomId) return;
+
+      try {
+        // Leave old room
+        socket.leave(`room_${oldRoomId}`);
+        activeUsers.delete(socket.id);
+        const leaveMsg = {
+          id: Date.now(),
+          roomId: oldRoomId,
+          senderNickname: "system",
+          content: `${user.nickname} has left the room.`,
+          type: "system" as const,
+          createdAt: new Date(),
+        };
+        io.to(`room_${oldRoomId}`).emit("system_message", leaveMsg);
+        io.to(`room_${oldRoomId}`).emit("users_updated", getRoomUsers(oldRoomId));
+
+        // Join new room
+        const updatedUser: ActiveUser = { ...user, roomId: newRoomId };
+        activeUsers.set(socket.id, updatedUser);
+        socket.join(`room_${newRoomId}`);
+
+        const roomUsers = getRoomUsers(newRoomId);
+        const roomRecord = await getRoomById(newRoomId);
+        const roomName = roomRecord?.name ?? "Now";
+
+        socket.emit("room_joined", { roomId: newRoomId, roomName, nickname: user.nickname, users: roomUsers });
+
+        // Load recent messages for new room
+        const db = await getDb();
+        if (db) {
+          const recentMessages = await db
+            .select()
+            .from(messages)
+            .where(eq(messages.roomId, newRoomId))
+            .limit(50);
+          socket.emit("message_history", recentMessages);
+        }
+
+        const joinMsg = {
+          id: Date.now() + 1,
+          roomId: newRoomId,
+          senderNickname: "system",
+          content: `${user.nickname} has entered the room.`,
+          type: "system" as const,
+          createdAt: new Date(),
+        };
+        io.to(`room_${newRoomId}`).emit("system_message", joinMsg);
+        io.to(`room_${newRoomId}`).emit("users_updated", getRoomUsers(newRoomId));
+
+        console.log(`[Socket] ${user.nickname} switched from room ${oldRoomId} to room ${newRoomId}`);
+      } catch (err) {
+        console.error("[Socket] switch_room error:", err);
+        socket.emit("error", { message: "Failed to switch room" });
       }
     });
 

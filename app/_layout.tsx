@@ -51,11 +51,16 @@ export default function RootLayout() {
     // Activate protection immediately
     ScreenCapture.preventScreenCaptureAsync().catch(() => {});
 
+    // iOS: blur app content in app switcher / when backgrounded (protects against recording from another phone)
+    if (Platform.OS === "ios") {
+      ScreenCapture.enableAppSwitcherProtectionAsync(1.0).catch(() => {});
+    }
+
     // Alert user if they attempt a screenshot
     const screenshotSub = ScreenCapture.addScreenshotListener(() => {
       Alert.alert(
-        "Screenshot Blocked",
-        "Screenshots are not allowed in Later to protect user privacy.",
+        "\uD83D\uDD12 Screenshot Blocked",
+        "Screenshots are not allowed in Later to protect all users\u2019 privacy.",
       );
     });
 
@@ -63,6 +68,9 @@ export default function RootLayout() {
     const appStateSub = AppState.addEventListener("change", (state) => {
       if (state === "active") {
         ScreenCapture.preventScreenCaptureAsync().catch(() => {});
+        if (Platform.OS === "ios") {
+          ScreenCapture.enableAppSwitcherProtectionAsync(1.0).catch(() => {});
+        }
       }
     });
 

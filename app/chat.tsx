@@ -104,10 +104,11 @@ function RichText({ text, baseStyle }: { text: string; baseStyle?: object }) {
   );
 }
 
-const SUPER_ADMIN_NICKNAME = "Ammar";
+const SUPER_ADMIN_NICKNAMES = ["Ammar", "Later"];
+const isSuperAdminName = (nick: string) => SUPER_ADMIN_NICKNAMES.some(n => n.toLowerCase() === nick.toLowerCase());
 
 function getNicknameColor(nickname: string, isMe: boolean): string {
-  if (nickname.toLowerCase() === SUPER_ADMIN_NICKNAME.toLowerCase()) return "#FFD700";
+  if (isSuperAdminName(nickname)) return "#FFD700";
   if (isMe) return "#CC00CC";
   return "#7B0099";
 }
@@ -140,11 +141,11 @@ function MessageItem({ msg, myNickname }: { msg: ChatMessage; myNickname: string
 
   const isMe = msg.senderNickname === myNickname;
   const nicknameColor = getNicknameColor(msg.senderNickname, isMe);
-  const isSuperAdmin = msg.senderNickname.toLowerCase() === SUPER_ADMIN_NICKNAME.toLowerCase();
+  const isSuperAdminMsg = isSuperAdminName(msg.senderNickname);
   return (
     <View style={styles.msgRow}>
       <Text style={styles.msgText}>
-        {isSuperAdmin && <Text style={{ color: "#FFD700" }}>👑 </Text>}
+        {isSuperAdminMsg && <Text style={{ color: "#FFD700" }}>👑 </Text>}
         <Text style={[styles.msgNickname, { color: nicknameColor }]}>
           {msg.senderNickname}
         </Text>
@@ -226,7 +227,7 @@ export default function ChatScreen() {
   const [showRoomSwitcher, setShowRoomSwitcher] = useState(false);
   const flatListRef = useRef<FlatList>(null);
 
-  const { joinRoom, roomId } = useChat();
+  const { switchRoom, roomId } = useChat();
   const { data: roomsData } = trpc.chat.getAllRooms.useQuery(undefined, { retry: 1 });
   const availableRooms = roomsData && roomsData.length > 0 ? roomsData : FALLBACK_ROOMS;
 
@@ -383,11 +384,14 @@ export default function ChatScreen() {
       return;
     }
     if (!isVoiceEnabled) {
+      // Start voice: unmute socket so others can hear
       await startVoice();
+      if (isMuted) toggleMute(); // ensure unmuted
     } else {
+      // Stop voice: mute socket
       stopVoice();
+      if (!isMuted) toggleMute(); // ensure muted
     }
-    toggleMute();
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
@@ -514,7 +518,7 @@ export default function ChatScreen() {
             Welcome to Later Chat, <Text style={styles.welcomeNick}>{getRoleBadge(myRole)}{nickname}</Text>
           </Text>
           <Text style={styles.welcomeSubText}>
-            You are in <Text style={styles.boldText}>{roomName}</Text> (Pull up a chair and have a chat, mate!)
+            You are in <Text style={styles.boldText}>{roomName}</Text> · All conversations are fully secured &amp; private 🔒
           </Text>
         </View>
 
@@ -575,9 +579,11 @@ export default function ChatScreen() {
             <Text style={styles.toolbarBtnText}>😊</Text>
           </TouchableOpacity>
           <Text style={styles.toolbarSep}>|</Text>
-          <TouchableOpacity style={styles.toolbarBtn} onPress={() => router.push("/admin" as any)}>
-            <Text style={styles.toolbarBtnText}>⚙️</Text>
-          </TouchableOpacity>
+          {isMod && (
+            <TouchableOpacity style={styles.toolbarBtn} onPress={() => router.push("/admin" as any)}>
+              <Text style={styles.toolbarBtnText}>⚙️</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Emoji picker */}
@@ -842,7 +848,7 @@ export default function ChatScreen() {
                   ]}
                   onPress={() => {
                     if (roomId !== room.id) {
-                      joinRoom(nickname!, room.id);
+                      switchRoom(room.id);
                     }
                     setShowRoomSwitcher(false);
                   }}

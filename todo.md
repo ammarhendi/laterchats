@@ -122,3 +122,7 @@
 - [x] Change all "conversations are monitored" text to "conversations are fully secured and private"
 - [x] Add "Later" as a second super admin username (both "Ammar" and "Later" are super admin names)
 - [x] Add room switcher button in chat header so users can change rooms without going back to welcome screen
+- [x] Fix super admin login loop: room selection → password modal → straight to chat (no back-and-forth)
+- [x] Fix clear chat not working (messages not wiped for all users in the room)
+- [x] Full app review: test every screen and flow, fix all broken/confusing UX issues
+- [x] Add audio recording prevention: iOS app switcher blur + Android FLAG_SECURE blocks screen recording including audio capture
