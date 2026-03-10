@@ -45,7 +45,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [isConnected, setIsConnected] = useState(false);
   const [nickname, setNicknameState] = useState<string | null>(null);
   const [roomId, setRoomId] = useState<number | null>(null);
-  const [roomName, setRoomName] = useState("The Local2");
+  const [roomName, setRoomName] = useState("Now");
   const [users, setUsers] = useState<ChatUser[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [privateMessages, setPrivateMessages] = useState<Record<string, ChatMessage[]>>({});

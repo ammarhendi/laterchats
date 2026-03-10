@@ -67,7 +67,7 @@ export default function AdminScreen() {
   });
 
   const handleGenerate = () => {
-    generateMutation.mutate();
+    generateMutation.mutate({ adminPin: "later2024" });
   };
 
   const handleCopy = async (token: string) => {

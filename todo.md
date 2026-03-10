@@ -50,3 +50,9 @@
 - [x] Text formatting toolbar (Bold, Italic)
 - [x] Error states (expired link, nickname taken)
 - [ ] All flows tested end-to-end
+
+## Bugs (reported after testing)
+- [x] Invite link generation button throws an error
+- [x] Bold text formatting shows **stars** instead of rendering bold visually
+- [x] Verify and fix voice/audio chat WebRTC functionality
+- [x] Rename chat room from "The Local2" to "Now"

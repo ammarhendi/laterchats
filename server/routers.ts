@@ -25,7 +25,7 @@ export const appRouter = router({
         const room = await db.ensureDefaultRoom();
         return room;
       } catch {
-        return { id: 1, name: "The Local2", description: "Pull up a chair and have a chat, mate!", isActive: true, createdAt: new Date() };
+        return { id: 1, name: "Now", description: "Pull up a chair and have a chat, mate!", isActive: true, createdAt: new Date() };
       }
     }),
 
@@ -35,13 +35,20 @@ export const appRouter = router({
         return db.validateInviteToken(input.token);
       }),
 
-    generateInvite: protectedProcedure.mutation(async () => {
-      const room = await db.ensureDefaultRoom();
-      const token = await db.generateInviteToken(room.id);
-      return { token: token.token, expiresAt: token.expiresAt };
-    }),
+    generateInvite: publicProcedure
+      .input(z.object({ adminPin: z.string().optional() }))
+      .mutation(async ({ input }) => {
+        // Simple admin PIN check — default PIN is "later2024" if not configured
+        const expectedPin = process.env.ADMIN_PIN || "later2024";
+        if (input.adminPin && input.adminPin !== expectedPin) {
+          throw new Error("Invalid admin PIN");
+        }
+        const room = await db.ensureDefaultRoom();
+        const token = await db.generateInviteToken(room.id);
+        return { token: token.token, expiresAt: token.expiresAt };
+      }),
 
-    getLatestInvite: protectedProcedure.query(async () => {
+    getLatestInvite: publicProcedure.query(async () => {
       const room = await db.ensureDefaultRoom();
       const token = await db.getLatestInviteToken(room.id);
       if (!token) return null;

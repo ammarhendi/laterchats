@@ -25,6 +25,46 @@ function formatTime(date: Date | string) {
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+// Parse text with **bold** and _italic_ markers into React Native Text spans
+function RichText({ text, baseStyle }: { text: string; baseStyle?: object }) {
+  // Split by bold (**text**) and italic (_text_) markers
+  const parts: { text: string; bold?: boolean; italic?: boolean }[] = [];
+  const regex = /\*\*(.+?)\*\*|_(.+?)_/g;
+  let lastIndex = 0;
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push({ text: text.slice(lastIndex, match.index) });
+    }
+    if (match[1] !== undefined) {
+      parts.push({ text: match[1], bold: true });
+    } else if (match[2] !== undefined) {
+      parts.push({ text: match[2], italic: true });
+    }
+    lastIndex = regex.lastIndex;
+  }
+  if (lastIndex < text.length) {
+    parts.push({ text: text.slice(lastIndex) });
+  }
+  if (parts.length === 0) parts.push({ text });
+  return (
+    <Text style={baseStyle}>
+      {parts.map((p, i) => (
+        <Text
+          key={i}
+          style={[
+            baseStyle,
+            p.bold ? { fontWeight: "bold" } : undefined,
+            p.italic ? { fontStyle: "italic" } : undefined,
+          ]}
+        >
+          {p.text}
+        </Text>
+      ))}
+    </Text>
+  );
+}
+
 function MessageItem({ msg, myNickname }: { msg: ChatMessage; myNickname: string }) {
   if (msg.type === "system") {
     return (
@@ -44,8 +84,8 @@ function MessageItem({ msg, myNickname }: { msg: ChatMessage; myNickname: string
             {isMe ? `To ${msg.recipientNickname}` : msg.senderNickname}
           </Text>
           <Text style={styles.msgSays}> whispers: </Text>
-          <Text style={styles.privateMsgContent}>"{msg.content}"</Text>
         </Text>
+        <RichText text={`"${msg.content}"`} baseStyle={styles.privateMsgContent} />
       </View>
     );
   }
@@ -58,8 +98,8 @@ function MessageItem({ msg, myNickname }: { msg: ChatMessage; myNickname: string
           {msg.senderNickname}
         </Text>
         <Text style={styles.msgSays}> says: </Text>
-        <Text style={styles.msgContent}>"{msg.content}"</Text>
       </Text>
+      <RichText text={`"${msg.content}"`} baseStyle={styles.msgContent} />
     </View>
   );
 }

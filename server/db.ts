@@ -105,7 +105,7 @@ export async function ensureDefaultRoom(): Promise<Room> {
   let room = await getActiveRoom();
   if (!room) {
     await db.insert(rooms).values({
-      name: "The Local2",
+      name: "Now",
       description: "Pull up a chair and have a chat, mate!",
       isActive: true,
     });

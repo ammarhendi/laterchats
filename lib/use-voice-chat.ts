@@ -2,10 +2,32 @@ import { useEffect, useRef, useCallback, useState } from "react";
 import { Platform } from "react-native";
 import { useChat } from "./chat-context";
 
-interface PeerConnection {
-  pc: RTCPeerConnection;
-  nickname: string;
+// Dynamically import react-native-webrtc on native, use browser WebRTC on web
+let RTCPeerConnectionNative: any = null;
+let RTCSessionDescriptionNative: any = null;
+let RTCIceCandidateNative: any = null;
+let mediaDevicesNative: any = null;
+
+if (Platform.OS !== "web") {
+  try {
+    const webrtc = require("react-native-webrtc");
+    RTCPeerConnectionNative = webrtc.RTCPeerConnection;
+    RTCSessionDescriptionNative = webrtc.RTCSessionDescription;
+    RTCIceCandidateNative = webrtc.RTCIceCandidate;
+    mediaDevicesNative = webrtc.mediaDevices;
+  } catch (e) {
+    console.warn("[Voice] react-native-webrtc not available:", e);
+  }
 }
+
+const getRTCPeerConnection = () =>
+  Platform.OS === "web" ? RTCPeerConnection : RTCPeerConnectionNative;
+const getRTCSessionDescription = () =>
+  Platform.OS === "web" ? RTCSessionDescription : RTCSessionDescriptionNative;
+const getRTCIceCandidate = () =>
+  Platform.OS === "web" ? RTCIceCandidate : RTCIceCandidateNative;
+const getMediaDevices = () =>
+  Platform.OS === "web" ? navigator.mediaDevices : mediaDevicesNative;
 
 const ICE_SERVERS = [
   { urls: "stun:stun.l.google.com:19302" },
@@ -15,43 +37,62 @@ const ICE_SERVERS = [
 
 export function useVoiceChat() {
   const { socket, nickname, isMuted } = useChat();
-  const localStreamRef = useRef<MediaStream | null>(null);
-  const peerConnectionsRef = useRef<Map<string, PeerConnection>>(new Map());
-  const audioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
+  const localStreamRef = useRef<any>(null);
+  const peerConnectionsRef = useRef<Map<string, any>>(new Map());
+  const audioElementsRef = useRef<Map<string, any>>(new Map());
   const [isVoiceEnabled, setIsVoiceEnabled] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const createPeerConnection = useCallback((targetNickname: string): RTCPeerConnection => {
-    // Close existing connection if any
+  const createPeerConnection = useCallback((targetNickname: string): any => {
     const existing = peerConnectionsRef.current.get(targetNickname);
     if (existing) {
-      existing.pc.close();
+      try { existing.close(); } catch {}
     }
 
-    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    const PeerConnection = getRTCPeerConnection();
+    if (!PeerConnection) {
+      console.warn("[Voice] RTCPeerConnection not available");
+      return null;
+    }
 
-    pc.onicecandidate = (event) => {
+    const pc = new PeerConnection({ iceServers: ICE_SERVERS });
+
+    pc.onicecandidate = (event: any) => {
       if (event.candidate && socket) {
         socket.emit("webrtc_ice_candidate", {
           targetNickname,
-          candidate: event.candidate.toJSON(),
+          candidate: event.candidate.toJSON ? event.candidate.toJSON() : event.candidate,
         });
       }
     };
 
-    pc.ontrack = (event) => {
-      if (event.streams[0] && Platform.OS === "web") {
-        // Create or reuse audio element for this peer
+    pc.ontrack = (event: any) => {
+      const stream = event.streams?.[0] || event.stream;
+      if (!stream) return;
+
+      if (Platform.OS === "web") {
+        // Web: use HTML Audio element
         let audio = audioElementsRef.current.get(targetNickname);
         if (!audio) {
           audio = new Audio();
           audio.autoplay = true;
           audioElementsRef.current.set(targetNickname, audio);
         }
-        audio.srcObject = event.streams[0];
-        audio.play().catch((err) => {
+        audio.srcObject = stream;
+        audio.play().catch((err: any) => {
           console.warn("[Voice] Audio play failed:", err);
         });
+      } else {
+        // Native: react-native-webrtc handles audio output automatically
+        // when tracks are added to the peer connection
+        console.log("[Voice] Remote stream received from:", targetNickname);
+      }
+    };
+
+    // react-native-webrtc uses onaddstream instead of ontrack in some versions
+    pc.onaddstream = (event: any) => {
+      if (Platform.OS !== "web" && event.stream) {
+        console.log("[Voice] Remote stream added from:", targetNickname);
       }
     };
 
@@ -60,90 +101,93 @@ export function useVoiceChat() {
       console.log(`[WebRTC] ${targetNickname}: ${state}`);
       if (state === "failed" || state === "closed" || state === "disconnected") {
         peerConnectionsRef.current.delete(targetNickname);
-        // Clean up audio element
-        const audio = audioElementsRef.current.get(targetNickname);
-        if (audio) {
-          audio.srcObject = null;
-          audioElementsRef.current.delete(targetNickname);
+        if (Platform.OS === "web") {
+          const audio = audioElementsRef.current.get(targetNickname);
+          if (audio) {
+            audio.srcObject = null;
+            audioElementsRef.current.delete(targetNickname);
+          }
         }
       }
     };
 
     // Add local stream tracks
     if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach((track) => {
-        pc.addTrack(track, localStreamRef.current!);
-      });
+      if (pc.addStream) {
+        // react-native-webrtc older API
+        pc.addStream(localStreamRef.current);
+      } else {
+        localStreamRef.current.getTracks().forEach((track: any) => {
+          pc.addTrack(track, localStreamRef.current);
+        });
+      }
     }
 
-    peerConnectionsRef.current.set(targetNickname, { pc, nickname: targetNickname });
+    peerConnectionsRef.current.set(targetNickname, pc);
     return pc;
   }, [socket]);
 
   const startVoice = useCallback(async () => {
-    if (Platform.OS === "web") {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-          },
-          video: false,
-        });
-        localStreamRef.current = stream;
+    try {
+      const mediaDevices = getMediaDevices();
+      if (!mediaDevices) {
+        setError("Voice chat is not supported on this device.");
+        return;
+      }
 
-        // Apply current mute state
-        stream.getAudioTracks().forEach((track) => {
+      const stream = await mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+        video: false,
+      });
+
+      localStreamRef.current = stream;
+
+      // Apply current mute state to tracks
+      if (stream.getAudioTracks) {
+        stream.getAudioTracks().forEach((track: any) => {
           track.enabled = !isMuted;
         });
-
-        setIsVoiceEnabled(true);
-        setError(null);
-
-        // Request list of current peers to connect with
-        socket?.emit("request_peers");
-      } catch (err: any) {
-        console.error("[Voice] Mic access failed:", err);
-        if (err.name === "NotAllowedError") {
-          setError("Microphone permission denied. Please allow mic access.");
-        } else if (err.name === "NotFoundError") {
-          setError("No microphone found on this device.");
-        } else {
-          setError("Could not access microphone.");
-        }
       }
-    } else {
-      // Native: use expo-audio for recording
-      try {
-        const expoAudio = await import("expo-audio");
-        await expoAudio.requestRecordingPermissionsAsync();
-        await expoAudio.setAudioModeAsync({
-          allowsRecording: true,
-          playsInSilentMode: true,
-        });
-        setIsVoiceEnabled(true);
-        setError(null);
-        socket?.emit("request_peers");
-      } catch (err) {
-        console.error("[Voice] Native audio setup failed:", err);
-        setError("Could not access microphone.");
+
+      setIsVoiceEnabled(true);
+      setError(null);
+
+      // Request list of current peers to connect with
+      socket?.emit("request_peers");
+    } catch (err: any) {
+      console.error("[Voice] Mic access failed:", err);
+      if (err.name === "NotAllowedError" || err.message?.includes("denied")) {
+        setError("Microphone permission denied. Please allow mic access.");
+      } else if (err.name === "NotFoundError") {
+        setError("No microphone found on this device.");
+      } else {
+        setError("Could not access microphone: " + (err.message || "Unknown error"));
       }
     }
   }, [socket, isMuted]);
 
   const stopVoice = useCallback(() => {
     // Stop all local tracks
-    localStreamRef.current?.getTracks().forEach((track) => track.stop());
-    localStreamRef.current = null;
+    if (localStreamRef.current) {
+      if (localStreamRef.current.getTracks) {
+        localStreamRef.current.getTracks().forEach((track: any) => track.stop());
+      }
+      localStreamRef.current = null;
+    }
 
     // Close all peer connections
-    peerConnectionsRef.current.forEach(({ pc }) => pc.close());
+    peerConnectionsRef.current.forEach((pc) => {
+      try { pc.close(); } catch {}
+    });
     peerConnectionsRef.current.clear();
 
-    // Clean up audio elements
+    // Clean up audio elements (web only)
     audioElementsRef.current.forEach((audio) => {
-      audio.srcObject = null;
+      try { audio.srcObject = null; } catch {}
     });
     audioElementsRef.current.clear();
 
@@ -152,14 +196,14 @@ export function useVoiceChat() {
 
   // Sync mute state with local stream
   useEffect(() => {
-    if (localStreamRef.current) {
-      localStreamRef.current.getAudioTracks().forEach((track) => {
+    if (localStreamRef.current?.getAudioTracks) {
+      localStreamRef.current.getAudioTracks().forEach((track: any) => {
         track.enabled = !isMuted;
       });
     }
   }, [isMuted]);
 
-  // Handle WebRTC signaling
+  // Handle WebRTC signaling via socket
   useEffect(() => {
     if (!socket) return;
 
@@ -167,6 +211,7 @@ export function useVoiceChat() {
       for (const peerNickname of peers) {
         if (peerNickname === nickname) continue;
         const pc = createPeerConnection(peerNickname);
+        if (!pc) continue;
         try {
           const offer = await pc.createOffer({
             offerToReceiveAudio: true,
@@ -180,10 +225,12 @@ export function useVoiceChat() {
       }
     };
 
-    const handleOffer = async ({ fromNickname, offer }: { fromNickname: string; offer: RTCSessionDescriptionInit }) => {
+    const handleOffer = async ({ fromNickname, offer }: { fromNickname: string; offer: any }) => {
       const pc = createPeerConnection(fromNickname);
+      if (!pc) return;
+      const RTCSessionDesc = getRTCSessionDescription();
       try {
-        await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        await pc.setRemoteDescription(RTCSessionDesc ? new RTCSessionDesc(offer) : offer);
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
         socket.emit("webrtc_answer", { targetNickname: fromNickname, answer });
@@ -192,12 +239,13 @@ export function useVoiceChat() {
       }
     };
 
-    const handleAnswer = async ({ fromNickname, answer }: { fromNickname: string; answer: RTCSessionDescriptionInit }) => {
-      const peer = peerConnectionsRef.current.get(fromNickname);
-      if (peer) {
+    const handleAnswer = async ({ fromNickname, answer }: { fromNickname: string; answer: any }) => {
+      const pc = peerConnectionsRef.current.get(fromNickname);
+      if (pc) {
+        const RTCSessionDesc = getRTCSessionDescription();
         try {
-          if (peer.pc.signalingState !== "stable") {
-            await peer.pc.setRemoteDescription(new RTCSessionDescription(answer));
+          if (pc.signalingState !== "stable") {
+            await pc.setRemoteDescription(RTCSessionDesc ? new RTCSessionDesc(answer) : answer);
           }
         } catch (err) {
           console.error("[WebRTC] Set answer failed:", err);
@@ -205,11 +253,12 @@ export function useVoiceChat() {
       }
     };
 
-    const handleIceCandidate = async ({ fromNickname, candidate }: { fromNickname: string; candidate: RTCIceCandidateInit }) => {
-      const peer = peerConnectionsRef.current.get(fromNickname);
-      if (peer) {
+    const handleIceCandidate = async ({ fromNickname, candidate }: { fromNickname: string; candidate: any }) => {
+      const pc = peerConnectionsRef.current.get(fromNickname);
+      if (pc) {
+        const RTCIceCand = getRTCIceCandidate();
         try {
-          await peer.pc.addIceCandidate(new RTCIceCandidate(candidate));
+          await pc.addIceCandidate(RTCIceCand ? new RTCIceCand(candidate) : candidate);
         } catch (err) {
           console.error("[WebRTC] ICE candidate failed:", err);
         }
@@ -217,15 +266,17 @@ export function useVoiceChat() {
     };
 
     const handlePeerDisconnected = ({ nickname: peerNickname }: { nickname: string }) => {
-      const peer = peerConnectionsRef.current.get(peerNickname);
-      if (peer) {
-        peer.pc.close();
+      const pc = peerConnectionsRef.current.get(peerNickname);
+      if (pc) {
+        try { pc.close(); } catch {}
         peerConnectionsRef.current.delete(peerNickname);
       }
-      const audio = audioElementsRef.current.get(peerNickname);
-      if (audio) {
-        audio.srcObject = null;
-        audioElementsRef.current.delete(peerNickname);
+      if (Platform.OS === "web") {
+        const audio = audioElementsRef.current.get(peerNickname);
+        if (audio) {
+          try { audio.srcObject = null; } catch {}
+          audioElementsRef.current.delete(peerNickname);
+        }
       }
     };
 
