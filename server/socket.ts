@@ -1,6 +1,6 @@
 import { Server as SocketIOServer } from "socket.io";
 import { Server as HttpServer } from "http";
-import { getDb } from "./db";
+import { getDb, getRoomById } from "./db";
 import { messages, inviteTokens } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
 import {
@@ -140,8 +140,10 @@ export function initSocketServer(httpServer: HttpServer) {
         socket.join(`room_${roomId}`);
 
         const roomUsers = getRoomUsers(roomId);
+        const roomRecord = await getRoomById(roomId);
+        const roomName = roomRecord?.name ?? "Now";
 
-        socket.emit("room_joined", { roomId, nickname, users: roomUsers });
+        socket.emit("room_joined", { roomId, roomName, nickname, users: roomUsers });
 
         // Load recent messages
         const db = await getDb();
@@ -220,7 +222,9 @@ export function initSocketServer(httpServer: HttpServer) {
         socket.join(`room_${roomId}`);
 
         const roomUsers = getRoomUsers(roomId);
-        socket.emit("room_joined", { roomId, nickname: SUPER_ADMIN_NICKNAME, users: roomUsers });
+        const roomRecord2 = await getRoomById(roomId);
+        const roomName2 = roomRecord2?.name ?? "Now";
+        socket.emit("room_joined", { roomId, roomName: roomName2, nickname: SUPER_ADMIN_NICKNAME, users: roomUsers });
 
         const db = await getDb();
         if (db) {

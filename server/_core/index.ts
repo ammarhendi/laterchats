@@ -8,6 +8,8 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { initSocketServer, getIo } from "../socket";
 import * as db from "../db";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise((resolve) => {
@@ -32,6 +34,44 @@ async function startServer() {
   const app = express();
   const server = createServer(app);
 
+  // ── Security: Helmet HTTP headers ────────────────────────────────────────────
+  app.use(
+    helmet({
+      crossOriginEmbedderPolicy: false, // needed for socket.io
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          connectSrc: ["'self'", "wss:", "ws:", "https:"],
+          imgSrc: ["'self'", "data:", "https:"],
+          scriptSrc: ["'self'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+        },
+      },
+    }),
+  );
+
+  // ── Security: Rate limiting ───────────────────────────────────────────────────
+  // General API: 200 requests per 15 minutes per IP
+  const generalLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 200,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many requests. Please try again later." },
+  });
+  // Auth endpoints: strict — 10 attempts per 15 minutes per IP
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many login attempts. Please try again in 15 minutes." },
+  });
+  app.use("/api", generalLimiter);
+  app.use("/api/trpc/user.login", authLimiter);
+  app.use("/api/trpc/user.register", authLimiter);
+  app.use("/api/clear-room", authLimiter);
+
   // Enable CORS for all routes - reflect the request origin to support credentials
   app.use((req, res, next) => {
     const origin = req.headers.origin;
@@ -53,8 +93,9 @@ async function startServer() {
     next();
   });
 
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  // ── Security: Limit request body size to prevent DoS ─────────────────────────
+  app.use(express.json({ limit: "1mb" }));
+  app.use(express.urlencoded({ limit: "1mb", extended: true }));
 
   registerOAuthRoutes(app);
 
@@ -65,18 +106,25 @@ async function startServer() {
   // Simple direct clear-room endpoint - no tRPC, no socket, just DB + broadcast
   app.post("/api/clear-room", async (req, res) => {
     try {
-      const { token } = req.body;
+      const { token, roomId } = req.body;
       const expectedToken = process.env.SUPER_ADMIN_CLEAR_TOKEN || "ammar_clear_2024";
       if (token !== expectedToken) {
         res.json({ success: false, error: "Unauthorized" });
         return;
       }
-      const room = await db.ensureDefaultRoom();
-      await db.clearRoomMessages(room.id);
+      // If a specific roomId is provided, clear that room; otherwise clear default
+      let targetRoomId: number;
+      if (roomId && typeof roomId === "number") {
+        targetRoomId = roomId;
+      } else {
+        const room = await db.ensureDefaultRoom();
+        targetRoomId = room.id;
+      }
+      await db.clearRoomMessages(targetRoomId);
       // Broadcast to all connected socket clients in this room
       const io = getIo();
       if (io) {
-        io.to(`room_${room.id}`).emit("room_cleared");
+        io.to(`room_${targetRoomId}`).emit("room_cleared");
       }
       res.json({ success: true });
     } catch (err) {

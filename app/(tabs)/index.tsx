@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -11,16 +11,50 @@ import {
   ScrollView,
   Modal,
   Alert,
+  ActivityIndicator,
+  Share,
+  FlatList,
 } from "react-native";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ScreenContainer } from "@/components/screen-container";
 import { useChat } from "@/lib/chat-context";
+import { trpc } from "@/lib/trpc";
+import * as ScreenCapture from "expo-screen-capture";
 
 const SAVED_NICKNAME_KEY = "@later_saved_nickname";
-
+const SAVED_REGISTERED_USER_KEY = "@later_registered_user";
 const SUPER_ADMIN_NICKNAME = "Ammar";
-const DEFAULT_ROOM_ID = 1;
+
+type Tab = "guest" | "login" | "register";
+type Screen = "auth" | "rooms";
+
+// Fallback rooms if server is unavailable
+const FALLBACK_ROOMS: { id: number; name: string; description: string | null }[] = [
+  { id: 1, name: "Now", description: "Pull up a chair and have a chat, mate!" },
+  { id: 2, name: "Arab World", description: "Arabic culture, news, and conversation." },
+  { id: 3, name: "Issues", description: "Discuss world issues and current events." },
+  { id: 4, name: "Social Media", description: "Talk about trends, platforms, and viral content." },
+  { id: 5, name: "Chilling Out", description: "Relax, unwind, and have a good time." },
+  { id: 6, name: "Dancing", description: "Music, moves, and dance culture." },
+  { id: 7, name: "Blah Blah", description: "Just talk about anything and everything." },
+  { id: 8, name: "Nothing Hidden", description: "Open, honest, and real conversations." },
+  { id: 9, name: "For All", description: "A room for everyone — all topics welcome." },
+  { id: 10, name: "Random", description: "Totally random conversations." },
+];
+
+const ROOM_ICONS: Record<string, string> = {
+  "Now": "⚡",
+  "Arab World": "🌍",
+  "Issues": "🔥",
+  "Social Media": "📱",
+  "Chilling Out": "😎",
+  "Dancing": "💃",
+  "Blah Blah": "💬",
+  "Nothing Hidden": "🔓",
+  "For All": "🌐",
+  "Random": "🎲",
+};
 
 export default function WelcomeScreen() {
   const router = useRouter();
@@ -33,17 +67,71 @@ export default function WelcomeScreen() {
     roomId,
   } = useChat();
 
+  const [screen, setScreen] = useState<Screen>("auth");
+  const [activeTab, setActiveTab] = useState<Tab>("guest");
+  const [pendingNickname, setPendingNickname] = useState("");
   const [nicknameInput, setNicknameInput] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+
+  // Login state
+  const [loginUsername, setLoginUsername] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+
+  // Register state
+  const [regUsername, setRegUsername] = useState("");
+  const [regEmail, setRegEmail] = useState("");
+  const [regPassword, setRegPassword] = useState("");
+  const [regConfirmPassword, setRegConfirmPassword] = useState("");
+  const [regDob, setRegDob] = useState(""); // YYYY-MM-DD
+
+  // Admin auth
+  const [adminPassword, setAdminPassword] = useState("");
+  const [adminConfirmPassword, setAdminConfirmPassword] = useState("");
   const [showAdminAuth, setShowAdminAuth] = useState(false);
   const [isSetup, setIsSetup] = useState(false);
+
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const registerMutation = trpc.user.register.useMutation();
+  const loginMutation = trpc.user.login.useMutation();
+  const { data: roomsData, isLoading: roomsLoading } = trpc.chat.getAllRooms.useQuery(undefined, {
+    retry: 2,
+  });
+
+  const rooms = roomsData && roomsData.length > 0 ? roomsData : FALLBACK_ROOMS;
+
+  // ── Screen capture prevention ─────────────────────────────────────────────
+  useEffect(() => {
+    let sub: { remove: () => void } | null = null;
+    if (Platform.OS !== "web") {
+      // Prevent screenshots and screen recording
+      ScreenCapture.preventScreenCaptureAsync().catch(() => {});
+      // Listen for screenshot attempts and warn
+      sub = ScreenCapture.addScreenshotListener(() => {
+        Alert.alert(
+          "Screenshot Blocked",
+          "Screenshots are not allowed in Later to protect user privacy.",
+        );
+      });
+    }
+    return () => {
+      if (sub) sub.remove();
+      if (Platform.OS !== "web") {
+        ScreenCapture.allowScreenCaptureAsync().catch(() => {});
+      }
+    };
+  }, []);
 
   // Load saved nickname on mount
   useEffect(() => {
     AsyncStorage.getItem(SAVED_NICKNAME_KEY).then((saved) => {
       if (saved) setNicknameInput(saved);
+    }).catch(() => {});
+    AsyncStorage.getItem(SAVED_REGISTERED_USER_KEY).then((saved) => {
+      if (saved) {
+        setLoginUsername(saved);
+        setActiveTab("login");
+      }
     }).catch(() => {});
   }, []);
 
@@ -62,56 +150,170 @@ export default function WelcomeScreen() {
     }
   }, [requireSuperAdminAuth, superAdminPasswordSet]);
 
-  const handleJoin = () => {
+  // ── Auth handlers ─────────────────────────────────────────────────────────
+  const handleGuestJoin = () => {
     const nick = nicknameInput.trim();
-    if (!nick) {
-      setError("Please enter a nickname");
-      return;
-    }
-    if (nick.length < 2) {
-      setError("Nickname must be at least 2 characters");
+    if (!nick) { setError("Please enter a nickname"); return; }
+    if (nick.length < 2) { setError("Nickname must be at least 2 characters"); return; }
+    if (nick.toLowerCase() === SUPER_ADMIN_NICKNAME.toLowerCase()) {
+      setError("This nickname is reserved.");
       return;
     }
     setError("");
-    // Save nickname for next time
     AsyncStorage.setItem(SAVED_NICKNAME_KEY, nick).catch(() => {});
-    joinRoom(nick, DEFAULT_ROOM_ID);
+    setPendingNickname(nick);
+    setScreen("rooms");
+  };
 
-    // If it's Ammar, the server will respond with require_super_admin_auth
-    // and the modal will open via the useEffect above
-    // For regular users, room_joined fires and we navigate to chat
-    if (nick.toLowerCase() !== SUPER_ADMIN_NICKNAME.toLowerCase()) {
-      setTimeout(() => {
-        router.replace("/chat" as any);
-      }, 500);
+  const handleLogin = async () => {
+    const username = loginUsername.trim();
+    if (!username || !loginPassword) { setError("Please fill in all fields"); return; }
+    setError("");
+    setLoading(true);
+    try {
+      const result = await loginMutation.mutateAsync({ username, password: loginPassword });
+      if (result.success) {
+        AsyncStorage.setItem(SAVED_REGISTERED_USER_KEY, username).catch(() => {});
+        AsyncStorage.setItem(SAVED_NICKNAME_KEY, username).catch(() => {});
+        setPendingNickname(username);
+        setScreen("rooms");
+      } else {
+        setError(result.error || "Login failed");
+      }
+    } catch (e: any) {
+      setError(e?.message || "Login failed");
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const handleRegister = async () => {
+    const username = regUsername.trim();
+    const email = regEmail.trim();
+    if (!username || !email || !regPassword || !regConfirmPassword) {
+      setError("Please fill in all fields"); return;
+    }
+    if (!regDob) {
+      setError("Please enter your date of birth"); return;
+    }
+    // Validate 18+
+    const dob = new Date(regDob);
+    if (isNaN(dob.getTime())) {
+      setError("Invalid date of birth (use YYYY-MM-DD format)"); return;
+    }
+    const today = new Date();
+    const age = today.getFullYear() - dob.getFullYear() -
+      (today < new Date(today.getFullYear(), dob.getMonth(), dob.getDate()) ? 1 : 0);
+    if (age < 18) {
+      setError("You must be 18 or older to register."); return;
+    }
+    if (username.toLowerCase() === SUPER_ADMIN_NICKNAME.toLowerCase()) {
+      setError("This username is reserved."); return;
+    }
+    if (username.length < 3) { setError("Username must be at least 3 characters"); return; }
+    if (regPassword.length < 6) { setError("Password must be at least 6 characters"); return; }
+    if (regPassword !== regConfirmPassword) { setError("Passwords do not match"); return; }
+    setError("");
+    setLoading(true);
+    try {
+      const result = await registerMutation.mutateAsync({
+        username,
+        password: regPassword,
+        email,
+        dateOfBirth: regDob,
+      });
+      if (result.success) {
+        Alert.alert("Registered!", "Your account has been created. Choose a room to join.");
+        AsyncStorage.setItem(SAVED_REGISTERED_USER_KEY, username).catch(() => {});
+        AsyncStorage.setItem(SAVED_NICKNAME_KEY, username).catch(() => {});
+        setPendingNickname(username);
+        setScreen("rooms");
+      } else {
+        setError(result.error || "Registration failed");
+      }
+    } catch (e: any) {
+      setError(e?.message || "Registration failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRoomSelect = (selectedRoomId: number) => {
+    joinRoom(pendingNickname, selectedRoomId);
+    setTimeout(() => { router.replace("/chat" as any); }, 400);
   };
 
   const handleAdminAuth = () => {
-    if (!password) {
-      setError("Please enter a password");
-      return;
-    }
+    if (!adminPassword) { setError("Please enter a password"); return; }
     if (isSetup) {
-      if (password.length < 6) {
-        setError("Password must be at least 6 characters");
-        return;
-      }
-      if (password !== confirmPassword) {
-        setError("Passwords do not match");
-        return;
-      }
+      if (adminPassword.length < 6) { setError("Password must be at least 6 characters"); return; }
+      if (adminPassword !== adminConfirmPassword) { setError("Passwords do not match"); return; }
     }
     setError("");
-    authenticateSuperAdmin(password, isSetup);
+    authenticateSuperAdmin(adminPassword, isSetup);
     setShowAdminAuth(false);
-    setPassword("");
-    setConfirmPassword("");
-    setTimeout(() => {
-      router.replace("/chat" as any);
-    }, 600);
+    setAdminPassword("");
+    setAdminConfirmPassword("");
+    setTimeout(() => { router.replace("/chat" as any); }, 600);
   };
 
+  const handleSuperAdminJoin = () => {
+    setError("");
+    joinRoom(SUPER_ADMIN_NICKNAME, 1);
+  };
+
+  const handleShare = async () => {
+    try {
+      await Share.share({
+        title: "Later — Voice & Text Chat",
+        message:
+          "Don't waste your time and don't be late — chat on Later! 🚀\n\nJoin the conversation: https://later.app",
+      });
+    } catch {}
+  };
+
+  // ── Room Selection Screen ─────────────────────────────────────────────────
+  if (screen === "rooms") {
+    return (
+      <ScreenContainer containerClassName="bg-black" className="bg-black">
+        <View style={styles.roomsHeader}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => setScreen("auth")}>
+            <Text style={styles.backBtnText}>← Back</Text>
+          </TouchableOpacity>
+          <Text style={styles.roomsTitle}>Choose a Room</Text>
+          <Text style={styles.roomsSubtitle}>Welcome, {pendingNickname}! Pick a room to join.</Text>
+        </View>
+        <FlatList
+          data={rooms}
+          keyExtractor={(item) => String(item.id)}
+          contentContainerStyle={styles.roomsList}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={styles.roomCard}
+              onPress={() => handleRoomSelect(item.id)}
+              activeOpacity={0.75}
+            >
+              <View style={styles.roomCardLeft}>
+                <Text style={styles.roomIcon}>{ROOM_ICONS[item.name] ?? "💬"}</Text>
+              </View>
+              <View style={styles.roomCardContent}>
+                <Text style={styles.roomCardName}>{item.name}</Text>
+                <Text style={styles.roomCardDesc} numberOfLines={1}>{item.description}</Text>
+              </View>
+              <Text style={styles.roomCardArrow}>›</Text>
+            </TouchableOpacity>
+          )}
+          ListHeaderComponent={
+            roomsLoading ? (
+              <ActivityIndicator color="#FFD700" style={{ marginVertical: 16 }} />
+            ) : null
+          }
+        />
+      </ScreenContainer>
+    );
+  }
+
+  // ── Auth Screen ───────────────────────────────────────────────────────────
   return (
     <ScreenContainer containerClassName="bg-black" className="bg-black">
       <KeyboardAvoidingView
@@ -126,62 +328,199 @@ export default function WelcomeScreen() {
               style={styles.logo}
               resizeMode="contain"
             />
+            <Text style={styles.appName}>Later</Text>
             <Text style={styles.tagline}>Voice &amp; Text Chat Rooms</Text>
+            <Text style={styles.tagline2}>Don't waste your time and don't be late — chat on Later!</Text>
           </View>
 
-          {/* Welcome card */}
+          {/* Card */}
           <View style={styles.card}>
             <View style={styles.cardHeader}>
-              <Text style={styles.cardHeaderText}>Welcome to Later Chat</Text>
-              <Text style={styles.cardSubText}>Pull up a chair and have a chat, mate!</Text>
+              <Text style={styles.cardHeaderText}>Join Later</Text>
+              <Text style={styles.cardSubText}>18+ only · All conversations are monitored</Text>
             </View>
 
-            <View style={styles.cardBody}>
-              <Text style={styles.label}>Enter Chat room as:</Text>
-              <TextInput
-                style={styles.input}
-                value={nicknameInput}
-                onChangeText={setNicknameInput}
-                placeholder="Your nickname"
-                placeholderTextColor="#666"
-                autoCapitalize="none"
-                autoCorrect={false}
-                returnKeyType="done"
-                onSubmitEditing={handleJoin}
-                maxLength={32}
-              />
-              {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-              <TouchableOpacity style={styles.joinBtn} onPress={handleJoin} activeOpacity={0.8}>
-                <Text style={styles.joinBtnText}>Go to Room</Text>
+            {/* Tabs */}
+            <View style={styles.tabs}>
+              <TouchableOpacity
+                style={[styles.tab, activeTab === "guest" && styles.tabActive]}
+                onPress={() => { setActiveTab("guest"); setError(""); }}
+              >
+                <Text style={[styles.tabText, activeTab === "guest" && styles.tabTextActive]}>Guest</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.tab, activeTab === "login" && styles.tabActive]}
+                onPress={() => { setActiveTab("login"); setError(""); }}
+              >
+                <Text style={[styles.tabText, activeTab === "login" && styles.tabTextActive]}>Login</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.tab, activeTab === "register" && styles.tabActive]}
+                onPress={() => { setActiveTab("register"); setError(""); }}
+              >
+                <Text style={[styles.tabText, activeTab === "register" && styles.tabTextActive]}>Register</Text>
               </TouchableOpacity>
             </View>
 
+            <View style={styles.cardBody}>
+              {/* GUEST TAB */}
+              {activeTab === "guest" && (
+                <>
+                  <Text style={styles.label}>Enter a nickname to join as guest:</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={nicknameInput}
+                    onChangeText={setNicknameInput}
+                    placeholder="Your nickname"
+                    placeholderTextColor="#666"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    returnKeyType="done"
+                    onSubmitEditing={handleGuestJoin}
+                    maxLength={32}
+                  />
+                  {error ? <Text style={styles.errorText}>{error}</Text> : null}
+                  <TouchableOpacity style={styles.joinBtn} onPress={handleGuestJoin} activeOpacity={0.8}>
+                    <Text style={styles.joinBtnText}>Choose a Room →</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.adminLink} onPress={handleSuperAdminJoin}>
+                    <Text style={styles.adminLinkText}>👑 Super Admin Login</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+
+              {/* LOGIN TAB */}
+              {activeTab === "login" && (
+                <>
+                  <Text style={styles.label}>Login with your account:</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={loginUsername}
+                    onChangeText={setLoginUsername}
+                    placeholder="Username"
+                    placeholderTextColor="#666"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    returnKeyType="next"
+                    maxLength={32}
+                  />
+                  <TextInput
+                    style={styles.input}
+                    value={loginPassword}
+                    onChangeText={setLoginPassword}
+                    placeholder="Password"
+                    placeholderTextColor="#666"
+                    secureTextEntry
+                    autoCapitalize="none"
+                    returnKeyType="done"
+                    onSubmitEditing={handleLogin}
+                  />
+                  {error ? <Text style={styles.errorText}>{error}</Text> : null}
+                  <TouchableOpacity style={styles.joinBtn} onPress={handleLogin} activeOpacity={0.8} disabled={loading}>
+                    {loading ? <ActivityIndicator color="#FFD700" /> : <Text style={styles.joinBtnText}>Login &amp; Choose Room →</Text>}
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => { setActiveTab("register"); setError(""); }}>
+                    <Text style={styles.switchText}>Don't have an account? Register</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+
+              {/* REGISTER TAB */}
+              {activeTab === "register" && (
+                <>
+                  <Text style={styles.label}>Create your account (18+ only):</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={regUsername}
+                    onChangeText={setRegUsername}
+                    placeholder="Username (min 3 chars)"
+                    placeholderTextColor="#666"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    returnKeyType="next"
+                    maxLength={32}
+                  />
+                  <TextInput
+                    style={styles.input}
+                    value={regEmail}
+                    onChangeText={setRegEmail}
+                    placeholder="Email address"
+                    placeholderTextColor="#666"
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                    returnKeyType="next"
+                  />
+                  <Text style={styles.dobLabel}>Date of Birth (must be 18+)</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={regDob}
+                    onChangeText={setRegDob}
+                    placeholder="YYYY-MM-DD  e.g. 1995-06-15"
+                    placeholderTextColor="#666"
+                    autoCapitalize="none"
+                    keyboardType="numbers-and-punctuation"
+                    returnKeyType="next"
+                    maxLength={10}
+                  />
+                  <TextInput
+                    style={styles.input}
+                    value={regPassword}
+                    onChangeText={setRegPassword}
+                    placeholder="Password (min 6 chars)"
+                    placeholderTextColor="#666"
+                    secureTextEntry
+                    autoCapitalize="none"
+                    returnKeyType="next"
+                  />
+                  <TextInput
+                    style={styles.input}
+                    value={regConfirmPassword}
+                    onChangeText={setRegConfirmPassword}
+                    placeholder="Confirm password"
+                    placeholderTextColor="#666"
+                    secureTextEntry
+                    autoCapitalize="none"
+                    returnKeyType="done"
+                    onSubmitEditing={handleRegister}
+                  />
+                  {error ? <Text style={styles.errorText}>{error}</Text> : null}
+                  <TouchableOpacity style={styles.joinBtn} onPress={handleRegister} activeOpacity={0.8} disabled={loading}>
+                    {loading ? <ActivityIndicator color="#FFD700" /> : <Text style={styles.joinBtnText}>Register &amp; Choose Room →</Text>}
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => { setActiveTab("login"); setError(""); }}>
+                    <Text style={styles.switchText}>Already have an account? Login</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+
             <View style={styles.cardFooter}>
-              <Text style={styles.footerText}>
-                By joining, you agree to be respectful to all users.
-              </Text>
-              <Text style={styles.footerText}>
-                Numbers next to chatters tell you how many are in the room.
-              </Text>
+              <Text style={styles.footerText}>By joining, you agree to be respectful to all users.</Text>
+              <Text style={styles.footerText}>This app is for users 18 years and older only.</Text>
             </View>
           </View>
 
-          {/* Room info */}
-          <View style={styles.roomInfo}>
-            <Text style={styles.roomInfoTitle}>📢 Now</Text>
-            <Text style={styles.roomInfoDesc}>The one and only chat room. Join and say hi!</Text>
+          {/* Share Button */}
+          <TouchableOpacity style={styles.shareBtn} onPress={handleShare} activeOpacity={0.8}>
+            <Text style={styles.shareBtnText}>📤  Share Later with Friends</Text>
+          </TouchableOpacity>
+
+          {/* Room preview list */}
+          <View style={styles.roomPreview}>
+            <Text style={styles.roomPreviewTitle}>10 Chat Rooms Available</Text>
+            <View style={styles.roomPreviewGrid}>
+              {FALLBACK_ROOMS.map((r) => (
+                <View key={r.id} style={styles.roomPill}>
+                  <Text style={styles.roomPillText}>{ROOM_ICONS[r.name]} {r.name}</Text>
+                </View>
+              ))}
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
 
       {/* Super Admin Auth Modal */}
-      <Modal
-        visible={showAdminAuth}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowAdminAuth(false)}
-      >
+      <Modal visible={showAdminAuth} transparent animationType="fade" onRequestClose={() => setShowAdminAuth(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
             <View style={styles.modalHeader}>
@@ -195,11 +534,10 @@ export default function WelcomeScreen() {
                 ? "Welcome, Ammar! Set your password to secure your Super Admin account."
                 : "Enter your Super Admin password to continue."}
             </Text>
-
             <TextInput
               style={styles.modalInput}
-              value={password}
-              onChangeText={setPassword}
+              value={adminPassword}
+              onChangeText={setAdminPassword}
               placeholder="Password"
               placeholderTextColor="#666"
               secureTextEntry
@@ -207,12 +545,11 @@ export default function WelcomeScreen() {
               returnKeyType={isSetup ? "next" : "done"}
               onSubmitEditing={isSetup ? undefined : handleAdminAuth}
             />
-
             {isSetup && (
               <TextInput
                 style={styles.modalInput}
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
+                value={adminConfirmPassword}
+                onChangeText={setAdminConfirmPassword}
                 placeholder="Confirm Password"
                 placeholderTextColor="#666"
                 secureTextEntry
@@ -221,24 +558,11 @@ export default function WelcomeScreen() {
                 onSubmitEditing={handleAdminAuth}
               />
             )}
-
             {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
             <TouchableOpacity style={styles.modalBtn} onPress={handleAdminAuth} activeOpacity={0.8}>
-              <Text style={styles.modalBtnText}>
-                {isSetup ? "Set Password & Enter" : "Login"}
-              </Text>
+              <Text style={styles.modalBtnText}>{isSetup ? "Set Password & Enter" : "Login"}</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.modalCancel}
-              onPress={() => {
-                setShowAdminAuth(false);
-                setPassword("");
-                setConfirmPassword("");
-                setError("");
-              }}
-            >
+            <TouchableOpacity style={styles.modalCancel} onPress={() => { setShowAdminAuth(false); setAdminPassword(""); setAdminConfirmPassword(""); setError(""); }}>
               <Text style={styles.modalCancelText}>Cancel</Text>
             </TouchableOpacity>
           </View>
@@ -249,181 +573,64 @@ export default function WelcomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  scroll: {
-    flexGrow: 1,
-    alignItems: "center",
-    paddingVertical: 24,
-    paddingHorizontal: 16,
-    gap: 20,
-  },
-  logoArea: {
-    alignItems: "center",
-    gap: 6,
-    marginTop: 16,
-  },
-  logo: {
-    width: 80,
-    height: 80,
-    borderRadius: 16,
-  },
-  tagline: {
-    color: "#888",
-    fontSize: 13,
-    fontStyle: "italic",
-  },
-  card: {
-    width: "100%",
-    maxWidth: 400,
-    backgroundColor: "#1a1a1a",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#7B0099",
-    overflow: "hidden",
-  },
-  cardHeader: {
-    backgroundColor: "#7B0099",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  cardHeaderText: {
-    color: "#FFD700",
-    fontWeight: "bold",
-    fontSize: 15,
-  },
-  cardSubText: {
-    color: "#ddd",
-    fontSize: 12,
-    marginTop: 2,
-  },
-  cardBody: {
-    padding: 16,
-    gap: 10,
-  },
-  label: {
-    color: "#aaa",
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  input: {
-    backgroundColor: "#000",
-    borderWidth: 1,
-    borderColor: "#444",
-    borderRadius: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: "#fff",
-    fontSize: 15,
-  },
-  errorText: {
-    color: "#FF4444",
-    fontSize: 12,
-  },
-  joinBtn: {
-    backgroundColor: "#7B0099",
-    paddingVertical: 12,
-    borderRadius: 4,
-    alignItems: "center",
-    marginTop: 4,
-  },
-  joinBtnText: {
-    color: "#FFD700",
-    fontWeight: "bold",
-    fontSize: 15,
-  },
-  cardFooter: {
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    gap: 3,
-  },
-  footerText: {
-    color: "#555",
-    fontSize: 11,
-    textAlign: "center",
-  },
-  roomInfo: {
-    width: "100%",
-    maxWidth: 400,
-    backgroundColor: "#111",
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: "#333",
-    padding: 12,
-    gap: 4,
-  },
-  roomInfoTitle: {
-    color: "#FFD700",
-    fontWeight: "bold",
-    fontSize: 14,
-  },
-  roomInfoDesc: {
-    color: "#888",
-    fontSize: 12,
-  },
-  // Modal styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.8)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 24,
-  },
-  modalBox: {
-    width: "100%",
-    maxWidth: 360,
-    backgroundColor: "#1a1a1a",
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: "#FFD700",
-    padding: 24,
-    gap: 12,
-  },
-  modalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  modalCrown: {
-    fontSize: 24,
-  },
-  modalTitle: {
-    color: "#FFD700",
-    fontWeight: "bold",
-    fontSize: 17,
-    flex: 1,
-  },
-  modalSubtitle: {
-    color: "#aaa",
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  modalInput: {
-    backgroundColor: "#000",
-    borderWidth: 1,
-    borderColor: "#444",
-    borderRadius: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: "#fff",
-    fontSize: 15,
-  },
-  modalBtn: {
-    backgroundColor: "#7B0099",
-    paddingVertical: 12,
-    borderRadius: 4,
-    alignItems: "center",
-    marginTop: 4,
-  },
-  modalBtnText: {
-    color: "#FFD700",
-    fontWeight: "bold",
-    fontSize: 15,
-  },
-  modalCancel: {
-    alignItems: "center",
-    paddingVertical: 8,
-  },
-  modalCancelText: {
-    color: "#666",
-    fontSize: 14,
-  },
+  scroll: { flexGrow: 1, alignItems: "center", paddingVertical: 24, paddingHorizontal: 16, gap: 20 },
+  logoArea: { alignItems: "center", gap: 4, marginTop: 16 },
+  logo: { width: 80, height: 80, borderRadius: 16 },
+  appName: { color: "#FFD700", fontSize: 28, fontWeight: "bold", letterSpacing: 2 },
+  tagline: { color: "#888", fontSize: 13, fontStyle: "italic" },
+  tagline2: { color: "#7B0099", fontSize: 12, textAlign: "center", paddingHorizontal: 20, marginTop: 2 },
+  card: { width: "100%", maxWidth: 400, backgroundColor: "#1a1a1a", borderRadius: 8, borderWidth: 1, borderColor: "#7B0099", overflow: "hidden" },
+  cardHeader: { backgroundColor: "#7B0099", paddingHorizontal: 16, paddingVertical: 10 },
+  cardHeaderText: { color: "#FFD700", fontWeight: "bold", fontSize: 15 },
+  cardSubText: { color: "#ddd", fontSize: 12, marginTop: 2 },
+  tabs: { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: "#333" },
+  tab: { flex: 1, paddingVertical: 10, alignItems: "center", borderBottomWidth: 2, borderBottomColor: "transparent" },
+  tabActive: { borderBottomColor: "#FFD700" },
+  tabText: { color: "#666", fontSize: 13, fontWeight: "600" },
+  tabTextActive: { color: "#FFD700" },
+  cardBody: { padding: 16, gap: 10 },
+  label: { color: "#aaa", fontSize: 13, fontWeight: "600" },
+  dobLabel: { color: "#FFD700", fontSize: 12, fontWeight: "600", marginTop: 2 },
+  input: { backgroundColor: "#000", borderWidth: 1, borderColor: "#444", borderRadius: 4, paddingHorizontal: 12, paddingVertical: 10, color: "#fff", fontSize: 15 },
+  errorText: { color: "#FF4444", fontSize: 12 },
+  joinBtn: { backgroundColor: "#7B0099", paddingVertical: 12, borderRadius: 4, alignItems: "center", marginTop: 4 },
+  joinBtnText: { color: "#FFD700", fontWeight: "bold", fontSize: 15 },
+  adminLink: { alignItems: "center", paddingVertical: 6 },
+  adminLinkText: { color: "#FFD700", fontSize: 12, opacity: 0.6 },
+  switchText: { color: "#7B0099", fontSize: 12, textAlign: "center", paddingVertical: 4 },
+  cardFooter: { paddingHorizontal: 16, paddingBottom: 12, gap: 3 },
+  footerText: { color: "#555", fontSize: 11, textAlign: "center" },
+  shareBtn: { width: "100%", maxWidth: 400, backgroundColor: "#111", borderWidth: 1, borderColor: "#7B0099", borderRadius: 8, paddingVertical: 14, alignItems: "center" },
+  shareBtnText: { color: "#FFD700", fontSize: 14, fontWeight: "600" },
+  roomPreview: { width: "100%", maxWidth: 400, backgroundColor: "#111", borderRadius: 8, borderWidth: 1, borderColor: "#333", padding: 14, gap: 10 },
+  roomPreviewTitle: { color: "#FFD700", fontWeight: "bold", fontSize: 13, textAlign: "center" },
+  roomPreviewGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "center" },
+  roomPill: { backgroundColor: "#1a1a1a", borderWidth: 1, borderColor: "#7B0099", borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5 },
+  roomPillText: { color: "#ccc", fontSize: 11 },
+  // Room selection screen
+  roomsHeader: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8, gap: 4 },
+  backBtn: { paddingVertical: 6 },
+  backBtnText: { color: "#7B0099", fontSize: 14, fontWeight: "600" },
+  roomsTitle: { color: "#FFD700", fontSize: 22, fontWeight: "bold" },
+  roomsSubtitle: { color: "#888", fontSize: 13 },
+  roomsList: { paddingHorizontal: 16, paddingBottom: 32, gap: 10 },
+  roomCard: { flexDirection: "row", alignItems: "center", backgroundColor: "#1a1a1a", borderRadius: 10, borderWidth: 1, borderColor: "#333", padding: 14, gap: 12 },
+  roomCardLeft: { width: 40, height: 40, borderRadius: 20, backgroundColor: "#111", alignItems: "center", justifyContent: "center" },
+  roomIcon: { fontSize: 20 },
+  roomCardContent: { flex: 1, gap: 2 },
+  roomCardName: { color: "#FFD700", fontWeight: "bold", fontSize: 15 },
+  roomCardDesc: { color: "#666", fontSize: 12 },
+  roomCardArrow: { color: "#7B0099", fontSize: 22, fontWeight: "bold" },
+  // Modal
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.8)", justifyContent: "center", alignItems: "center", padding: 24 },
+  modalBox: { width: "100%", maxWidth: 360, backgroundColor: "#1a1a1a", borderRadius: 10, borderWidth: 2, borderColor: "#FFD700", padding: 24, gap: 12 },
+  modalHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
+  modalCrown: { fontSize: 24 },
+  modalTitle: { color: "#FFD700", fontWeight: "bold", fontSize: 17, flex: 1 },
+  modalSubtitle: { color: "#aaa", fontSize: 13, lineHeight: 18 },
+  modalInput: { backgroundColor: "#000", borderWidth: 1, borderColor: "#444", borderRadius: 4, paddingHorizontal: 12, paddingVertical: 10, color: "#fff", fontSize: 15 },
+  modalBtn: { backgroundColor: "#7B0099", paddingVertical: 12, borderRadius: 4, alignItems: "center", marginTop: 4 },
+  modalBtnText: { color: "#FFD700", fontWeight: "bold", fontSize: 15 },
+  modalCancel: { alignItems: "center", paddingVertical: 8 },
+  modalCancelText: { color: "#666", fontSize: 14 },
 });

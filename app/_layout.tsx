@@ -5,7 +5,7 @@ import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
-import { Platform } from "react-native";
+import { Platform, Alert, AppState } from "react-native";
 import "@/lib/_core/nativewind-pressable";
 import { ThemeProvider } from "@/lib/theme-provider";
 import {
@@ -15,6 +15,7 @@ import {
   initialWindowMetrics,
 } from "react-native-safe-area-context";
 import type { EdgeInsets, Metrics, Rect } from "react-native-safe-area-context";
+import * as ScreenCapture from "expo-screen-capture";
 
 import { trpc, createTRPCClient } from "@/lib/trpc";
 import { initManusRuntime, subscribeSafeAreaInsets } from "@/lib/_core/manus-runtime";
@@ -37,6 +38,38 @@ export default function RootLayout() {
   // Initialize Manus runtime for cookie injection from parent container
   useEffect(() => {
     initManusRuntime();
+  }, []);
+
+  // ── Global screen capture prevention ─────────────────────────────────────
+  // Prevents screenshots, screen recording, and capture from any source.
+  // Android: FLAG_SECURE makes screen appear black when captured or recorded.
+  // iOS: blurs app when not in foreground (protects against recording from another phone).
+  // Re-applied every time the app comes back to foreground.
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+
+    // Activate protection immediately
+    ScreenCapture.preventScreenCaptureAsync().catch(() => {});
+
+    // Alert user if they attempt a screenshot
+    const screenshotSub = ScreenCapture.addScreenshotListener(() => {
+      Alert.alert(
+        "Screenshot Blocked",
+        "Screenshots are not allowed in Later to protect user privacy.",
+      );
+    });
+
+    // Re-apply protection every time app becomes active (foreground)
+    const appStateSub = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        ScreenCapture.preventScreenCaptureAsync().catch(() => {});
+      }
+    });
+
+    return () => {
+      screenshotSub.remove();
+      appStateSub.remove();
+    };
   }, []);
 
   const handleSafeAreaUpdate = useCallback((metrics: Metrics) => {

@@ -5,6 +5,19 @@ import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import * as db from "./db";
 
+const FALLBACK_ROOMS = [
+  { id: 1, name: "Now", description: "Pull up a chair and have a chat, mate!", isActive: true, createdAt: new Date() },
+  { id: 2, name: "Arab World", description: "Arabic culture, news, and conversation.", isActive: true, createdAt: new Date() },
+  { id: 3, name: "Issues", description: "Discuss world issues and current events.", isActive: true, createdAt: new Date() },
+  { id: 4, name: "Social Media", description: "Talk about trends, platforms, and viral content.", isActive: true, createdAt: new Date() },
+  { id: 5, name: "Chilling Out", description: "Relax, unwind, and have a good time.", isActive: true, createdAt: new Date() },
+  { id: 6, name: "Dancing", description: "Music, moves, and dance culture.", isActive: true, createdAt: new Date() },
+  { id: 7, name: "Blah Blah", description: "Just talk about anything and everything.", isActive: true, createdAt: new Date() },
+  { id: 8, name: "Nothing Hidden", description: "Open, honest, and real conversations.", isActive: true, createdAt: new Date() },
+  { id: 9, name: "For All", description: "A room for everyone — all topics welcome.", isActive: true, createdAt: new Date() },
+  { id: 10, name: "Random", description: "Totally random conversations.", isActive: true, createdAt: new Date() },
+];
+
 export const appRouter = router({
   // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
@@ -20,14 +33,32 @@ export const appRouter = router({
   }),
 
   chat: router({
+    getAllRooms: publicProcedure.query(async () => {
+      try {
+        return await db.getAllRooms();
+      } catch {
+        return FALLBACK_ROOMS;
+      }
+    }),
+
     getRoom: publicProcedure.query(async () => {
       try {
         const room = await db.ensureDefaultRoom();
         return room;
       } catch {
-        return { id: 1, name: "Now", description: "Pull up a chair and have a chat, mate!", isActive: true, createdAt: new Date() };
+        return FALLBACK_ROOMS[0];
       }
     }),
+
+    getRoomById: publicProcedure
+      .input(z.object({ roomId: z.number() }))
+      .query(async ({ input }) => {
+        try {
+          return await db.getRoomById(input.roomId) ?? null;
+        } catch {
+          return FALLBACK_ROOMS.find((r) => r.id === input.roomId) ?? null;
+        }
+      }),
 
     validateToken: publicProcedure
       .input(z.object({ token: z.string() }))
@@ -38,7 +69,6 @@ export const appRouter = router({
     generateInvite: publicProcedure
       .input(z.object({ adminPin: z.string().optional() }))
       .mutation(async ({ input }) => {
-        // Simple admin PIN check — default PIN is "later2024" if not configured
         const expectedPin = process.env.ADMIN_PIN || "later2024";
         if (input.adminPin && input.adminPin !== expectedPin) {
           throw new Error("Invalid admin PIN");
@@ -64,7 +94,6 @@ export const appRouter = router({
     clearRoom: publicProcedure
       .input(z.object({ superAdminToken: z.string() }))
       .mutation(async ({ input }) => {
-        // Verify the super admin token (stored in env or db)
         const expectedToken = process.env.SUPER_ADMIN_CLEAR_TOKEN || "ammar_clear_2024";
         if (input.superAdminToken !== expectedToken) {
           throw new Error("Unauthorized");
@@ -72,6 +101,41 @@ export const appRouter = router({
         const room = await db.ensureDefaultRoom();
         await db.clearRoomMessages(room.id);
         return { success: true };
+      }),
+  }),
+
+  user: router({
+    register: publicProcedure
+      .input(z.object({
+        username: z.string().min(3).max(32),
+        password: z.string().min(6),
+        email: z.string().email(),
+        dateOfBirth: z.string().optional(), // YYYY-MM-DD
+      }))
+      .mutation(async ({ input }) => {
+        return db.registerChatUser(input.username, input.password, input.email, input.dateOfBirth);
+      }),
+
+    login: publicProcedure
+      .input(z.object({
+        username: z.string(),
+        password: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        return db.loginChatUser(input.username, input.password);
+      }),
+
+    requestPasswordReset: publicProcedure
+      .input(z.object({ email: z.string().email() }))
+      .mutation(async ({ input }) => {
+        const result = await db.requestPasswordReset(input.email);
+        return { success: result.success, error: result.error };
+      }),
+
+    resetPassword: publicProcedure
+      .input(z.object({ token: z.string(), newPassword: z.string().min(6) }))
+      .mutation(async ({ input }) => {
+        return db.resetPasswordWithToken(input.token, input.newPassword);
       }),
   }),
 });

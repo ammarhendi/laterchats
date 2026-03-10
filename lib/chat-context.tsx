@@ -75,7 +75,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [nickname, setNicknameState] = useState<string | null>(null);
   const [myRole, setMyRole] = useState<UserRole>("user");
   const [roomId, setRoomId] = useState<number | null>(null);
-  const [roomName] = useState("Now");
+  const [roomName, setRoomName] = useState("Now");
   const [users, setUsers] = useState<ChatUser[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [privateMessages, setPrivateMessages] = useState<Record<string, ChatMessage[]>>({});
@@ -126,8 +126,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       setIsConnected(false);
     });
 
-    sock.on("room_joined", ({ roomId: rId, users: roomUsers }: { roomId: number; nickname: string; users: ChatUser[] }) => {
+    sock.on("room_joined", ({ roomId: rId, roomName: rName, users: roomUsers }: { roomId: number; roomName?: string; nickname: string; users: ChatUser[] }) => {
       setRoomId(rId);
+      if (rName) setRoomName(rName);
       setUsers(roomUsers);
       setRequireSuperAdminAuth(false);
     });

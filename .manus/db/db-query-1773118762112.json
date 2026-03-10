@@ -1,0 +1,20 @@
+{
+  "query": "SELECT * FROM rooms; SELECT COUNT(*) as message_count FROM messages;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3uBFKRJzr9wfTgy.deacf1aa3b59 --database NzGynwH9ginkrkq4LKn7H4 --execute SELECT * FROM rooms; SELECT COUNT(*) as message_count FROM messages;",
+  "rows": [
+    {
+      "id": "1",
+      "name": "The Local2",
+      "description": "Pull up a chair and have a chat, mate!",
+      "isActive": "1",
+      "createdAt": "2026-03-10 03:19:24"
+    }
+  ],
+  "messages": [
+    "message_count",
+    "0"
+  ],
+  "stdout": "id\tname\tdescription\tisActive\tcreatedAt\n1\tThe Local2\tPull up a chair and have a chat, mate!\t1\t2026-03-10 03:19:24\nmessage_count\n0\n",
+  "stderr": "",
+  "execution_time_ms": 1796
+}

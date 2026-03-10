@@ -50,10 +50,16 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: true,
     bundleIdentifier: env.iosBundleId,
-    "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
-      }
+    // Age rating: 18+ (mature content, adult chat)
+    infoPlist: {
+      ITSAppUsesNonExemptEncryption: false,
+      // App Store age rating: 17+ (equivalent to 18+ in store)
+      LSApplicationQueriesSchemes: [],
+    },
   },
+  // Note: Set content rating to 18+ in App Store Connect and Google Play Console
+  // App Store: "17+" rating with "Frequent/Intense" for mature/suggestive themes
+  // Google Play: "Mature 17+" content rating
   android: {
     adaptiveIcon: {
       backgroundColor: "#E6F4FE",
@@ -86,6 +92,7 @@ const config: ExpoConfig = {
   },
   plugins: [
     "expo-router",
+    "expo-screen-capture",
     [
       "expo-audio",
       {
@@ -125,6 +132,9 @@ const config: ExpoConfig = {
     typedRoutes: true,
     reactCompiler: true,
   },
+  // Age rating metadata (18+ / Mature)
+  // Set in App Store Connect: 17+ with mature content
+  // Set in Google Play Console: Mature 17+
 };
 
 export default config;

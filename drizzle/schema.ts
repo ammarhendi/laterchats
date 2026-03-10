@@ -1,4 +1,4 @@
-import { boolean, int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { boolean, int, mysqlEnum, mysqlTable, text, timestamp, varchar, date } from "drizzle-orm/mysql-core";
 
 export const users = mysqlTable("users", {
   id: int("id").autoincrement().primaryKey(),
@@ -15,7 +15,7 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
-// Chat room (single room, admin-created)
+// Chat rooms (multiple rooms)
 export const rooms = mysqlTable("rooms", {
   id: int("id").autoincrement().primaryKey(),
   name: varchar("name", { length: 255 }).notNull(),
@@ -91,3 +91,21 @@ export const chatRoles = mysqlTable("chat_roles", {
 
 export type ChatRole = typeof chatRoles.$inferSelect;
 export type InsertChatRole = typeof chatRoles.$inferInsert;
+
+// Registered chat users (username + password + email + dateOfBirth + lockout)
+export const chatUsers = mysqlTable("chat_users", {
+  id: int("id").autoincrement().primaryKey(),
+  username: varchar("username", { length: 64 }).notNull().unique(),
+  passwordHash: varchar("passwordHash", { length: 256 }).notNull(),
+  email: varchar("email", { length: 320 }).notNull().unique(),
+  dateOfBirth: date("dateOfBirth"),
+  resetToken: varchar("resetToken", { length: 128 }),
+  resetTokenExpiresAt: timestamp("resetTokenExpiresAt"),
+  failedLoginAttempts: int("failedLoginAttempts").default(0).notNull(),
+  lockedUntil: timestamp("lockedUntil"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ChatUser = typeof chatUsers.$inferSelect;
+export type InsertChatUser = typeof chatUsers.$inferInsert;

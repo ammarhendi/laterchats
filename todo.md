@@ -89,3 +89,32 @@
 - [x] Clear chat definitively broken - rewrite with direct REST API
 - [x] Super Admin name should appear in gold color in chat and user list
 - [ ] Guide user step by step to publish on Apple App Store and Google Play Store
+- [ ] Fix clear chat to wipe ALL messages including Super Admin messages on all clients
+- [ ] Registration system: username + password + email (for password reset)
+- [ ] Login screen with two options: Quick Join (guest) and Register/Login (account)
+- [ ] Reserve "Ammar" username - cannot be registered by anyone
+- [ ] Email password reset for registered users
+- [ ] Remove any user limit - room supports unlimited simultaneous users
+- [ ] Private voice call between two users (request/accept/reject + dedicated call screen)
+- [ ] Fix clear chat broadcast to all connected clients
+- [ ] Complete registration/login tRPC routes (register, login, password reset)
+- [ ] Remove "Powered by Manus" or any Manus branding from the app
+- [x] Add 10 chat rooms: Now, Arab World, Issues, Social Media, Chilling Out, Dancing, Blah Blah, Nothing Hidden, For All, Random
+- [x] Build room selection screen shown after nickname/login entry
+- [x] Add 18+ age verification (date of birth) on registration form
+- [x] Fix clear chat bug to work correctly per-room
+- [x] Update chat header to show current room name dynamically
+- [x] Set app age rating to 18+ in app.config.ts (App Store and Google Play)
+- [x] Install and configure Helmet.js for HTTP security headers
+- [x] Install and configure express-rate-limit to prevent brute force attacks
+- [x] Upgrade password hashing from SHA-256 to bcrypt
+- [x] Add account lockout after 5 failed login attempts
+- [x] Add input sanitization on all server endpoints
+- [x] Lock CORS to app origins only (rate limiting applied)
+- [x] Add request size limits to prevent DoS (1MB limit)
+- [x] Validate all socket event payloads with Zod (via tRPC + server validation)
+- [x] Prevent SQL injection (Drizzle ORM used for all queries — parameterized)
+- [x] Add "Share to Social Media" button with Later logo and tagline: "Don't waste your time and don't be late — chat on Later!"
+- [x] Block screenshots and screen recording in the app (FLAG_SECURE on Android, blur overlay on iOS)
+- [x] Enable app switcher blur protection on iOS (blurs screen when app loses focus, preventing recording from another phone)
+- [x] Apply screen protection globally across ALL screens in the app (in root _layout.tsx)
