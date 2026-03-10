@@ -118,11 +118,21 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const setupSocketListeners = useCallback((sock: Socket) => {
+   const setupSocketListeners = useCallback((sock: Socket) => {
     sock.on("connect", () => {
       setIsConnected(true);
     });
 
+    // When socket reconnects after server restart, rejoin the room
+    sock.io.on("reconnect", () => {
+      const nick = nicknameRef.current;
+      const rId = pendingRoomIdRef.current;
+      if (nick && rId) {
+        // Use rejoin_room so super admin doesn't need to re-enter password
+        // The server will resolve the correct role based on nickname
+        sock.emit("rejoin_room", { nickname: nick, roomId: rId, role: "user" });
+      }
+    });
     sock.on("disconnect", () => {
       setIsConnected(false);
     });
@@ -356,15 +366,17 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const clearAllMessages = useCallback(() => {
     const sock = socketRef.current;
     if (!sock || !sock.connected) {
-      Alert.alert("Error", "Not connected to server");
+      Alert.alert("Error", "Not connected to server. Please wait for reconnection.");
       return;
     }
     // Optimistically clear local messages immediately
     setMessages([]);
     // Use socket clear_room — server deletes from DB and broadcasts room_cleared to ALL users in the room
+    console.log("[Chat] Emitting clear_room, socket connected:", sock.connected, "socket id:", sock.id);
     sock.emit("clear_room", (result: { success: boolean; message?: string }) => {
+      console.log("[Chat] clear_room ack result:", result);
       if (!result?.success) {
-        Alert.alert("Error", result?.message || "Failed to clear chat");
+        Alert.alert("Clear Chat Failed", result?.message || "Failed to clear chat. You may need to re-enter the room.");
       }
     });
   }, []);

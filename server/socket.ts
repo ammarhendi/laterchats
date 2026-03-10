@@ -78,6 +78,44 @@ export function initSocketServer(httpServer: HttpServer) {
 
     console.log(`[Socket] New connection: ${socket.id} from ${ipAddress}`);
 
+    // ── Rejoin room (after server restart / reconnect) ──────────────────────
+    // Client sends this when socket reconnects and user was already in a room.
+    // For super admin nicknames, re-adds them without password re-entry.
+    socket.on("rejoin_room", async ({ nickname, roomId, role }: { nickname: string; roomId: number; role: string }) => {
+      try {
+        // Remove any existing entry for this socket
+        activeUsers.delete(socket.id);
+        const resolvedRole = isSuperAdminNickname(nickname) ? "super_admin" : (role === "moderator" ? "moderator" : "user");
+        const user: ActiveUser = {
+          socketId: socket.id,
+          nickname,
+          roomId,
+          isMuted: true,
+          isVoiceActive: false,
+          isVoiceBanned: false,
+          isTextMuted: false,
+          role: resolvedRole as ActiveUser["role"],
+          ipAddress,
+          joinedAt: new Date(),
+        };
+        activeUsers.set(socket.id, user);
+        socket.join(`room_${roomId}`);
+        const roomUsers = getRoomUsers(roomId);
+        const roomRecord = await getRoomById(roomId);
+        const roomName = roomRecord?.name ?? "Now";
+        socket.emit("room_joined", { roomId, roomName, nickname, users: roomUsers });
+        const db = await getDb();
+        if (db) {
+          const recentMessages = await db.select().from(messages).where(eq(messages.roomId, roomId)).limit(50);
+          socket.emit("message_history", recentMessages);
+        }
+        io.to(`room_${roomId}`).emit("users_updated", roomUsers);
+        console.log(`[Socket] ${nickname} (${resolvedRole}) rejoined room ${roomId} after reconnect`);
+      } catch (err) {
+        console.error("[Socket] rejoin_room error:", err);
+      }
+    });
+
     // ── Join room ─────────────────────────────────────────────────────────────
     socket.on("join_room", async ({ nickname, roomId, token }: { nickname: string; roomId: number; token?: string }) => {
       try {
