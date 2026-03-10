@@ -11,10 +11,11 @@ import {
   Platform,
   KeyboardAvoidingView,
   Alert,
+  ScrollView,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
-import { useChat, ChatMessage, ChatUser } from "@/lib/chat-context";
+import { useChat, ChatMessage, ChatUser, UserRole } from "@/lib/chat-context";
 import { useVoiceChat } from "@/lib/use-voice-chat";
 import * as Haptics from "expo-haptics";
 
@@ -25,9 +26,20 @@ function formatTime(date: Date | string) {
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+function getRoleBadge(role: UserRole): string {
+  if (role === "super_admin") return "👑 ";
+  if (role === "moderator") return "🛡️ ";
+  return "";
+}
+
+function getRoleColor(role: UserRole): string {
+  if (role === "super_admin") return "#FFD700";
+  if (role === "moderator") return "#00AAFF";
+  return "#7B0099";
+}
+
 // Parse text with **bold** and _italic_ markers into React Native Text spans
 function RichText({ text, baseStyle }: { text: string; baseStyle?: object }) {
-  // Split by bold (**text**) and italic (_text_) markers
   const parts: { text: string; bold?: boolean; italic?: boolean }[] = [];
   const regex = /\*\*(.+?)\*\*|_(.+?)_/g;
   let lastIndex = 0;
@@ -104,14 +116,25 @@ function MessageItem({ msg, myNickname }: { msg: ChatMessage; myNickname: string
   );
 }
 
-function UserItem({ user, onPress }: { user: ChatUser; onPress: () => void }) {
+function UserItem({ user, onPress, unreadCount }: { user: ChatUser; onPress: () => void; unreadCount?: number }) {
+  const badge = getRoleBadge(user.role);
+  const nameColor = getRoleColor(user.role);
   return (
     <TouchableOpacity style={styles.userItem} onPress={onPress} activeOpacity={0.7}>
       <View style={[
         styles.userDot,
         user.isVoiceActive ? styles.userDotVoice : styles.userDotOnline
       ]} />
-      <Text style={styles.userName} numberOfLines={1}>{user.nickname}</Text>
+      <Text style={[styles.userName, { color: nameColor }]} numberOfLines={1}>
+        {badge}{user.nickname}
+      </Text>
+      {user.isTextMuted && <Text style={styles.mutedIcon}>🔇</Text>}
+      {user.isVoiceBanned && <Text style={styles.mutedIcon}>🚫</Text>}
+      {unreadCount ? (
+        <View style={styles.userItemBadge}>
+          <Text style={styles.userItemBadgeText}>{unreadCount > 9 ? "9+" : unreadCount}</Text>
+        </View>
+      ) : null}
     </TouchableOpacity>
   );
 }
@@ -120,15 +143,32 @@ export default function ChatScreen() {
   const router = useRouter();
   const {
     nickname,
+    myRole,
     roomName,
     users,
     messages,
     isMuted,
+    isVoiceBanned,
+    isTextMuted,
     sendMessage,
     sendPrivateMessage,
     toggleMute,
     leaveRoom,
     isConnected,
+    unreadPMs,
+    incomingPM,
+    dismissIncomingPM,
+    markPMRead,
+    clearAllMessages,
+    kickUser,
+    banUser,
+    unbanUser,
+    promoteUser,
+    demoteUser,
+    muteUserText,
+    unmuteUserText,
+    requestBannedList,
+    bannedList,
   } = useChat();
 
   const { isVoiceEnabled, startVoice, stopVoice, error: voiceError } = useVoiceChat();
@@ -137,7 +177,15 @@ export default function ChatScreen() {
   const [showEmoji, setShowEmoji] = useState(false);
   const [selectedUser, setSelectedUser] = useState<ChatUser | null>(null);
   const [showUserModal, setShowUserModal] = useState(false);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [showBannedList, setShowBannedList] = useState(false);
+  const [banReason, setBanReason] = useState("");
+  const [showBanInput, setShowBanInput] = useState(false);
+  const [banVoiceOnly, setBanVoiceOnly] = useState(false);
   const flatListRef = useRef<FlatList>(null);
+
+  const isAdmin = myRole === "super_admin";
+  const isMod = myRole === "moderator" || myRole === "super_admin";
 
   // Redirect to home if no nickname
   useEffect(() => {
@@ -158,12 +206,16 @@ export default function ChatScreen() {
   const handleSend = useCallback(() => {
     const text = inputText.trim();
     if (!text) return;
+    if (isTextMuted) {
+      Alert.alert("Muted", "You have been muted and cannot send messages.");
+      return;
+    }
     sendMessage(text);
     setInputText("");
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-  }, [inputText, sendMessage]);
+  }, [inputText, sendMessage, isTextMuted]);
 
   const handleEmojiSelect = (emoji: string) => {
     setInputText((prev) => prev + emoji);
@@ -174,13 +226,22 @@ export default function ChatScreen() {
     if (user.nickname === nickname) return;
     setSelectedUser(user);
     setShowUserModal(true);
+    setShowBanInput(false);
+    setBanReason("");
   };
 
   const handlePM = () => {
     setShowUserModal(false);
     if (selectedUser) {
+      markPMRead(selectedUser.nickname);
       router.push(`/pm/${selectedUser.nickname}` as any);
     }
+  };
+
+  const handleOpenPMFromBanner = (fromNickname: string) => {
+    dismissIncomingPM();
+    markPMRead(fromNickname);
+    router.push(`/pm/${fromNickname}` as any);
   };
 
   const handleIgnore = () => {
@@ -188,7 +249,86 @@ export default function ChatScreen() {
     Alert.alert("Ignored", `${selectedUser?.nickname} has been ignored.`);
   };
 
+  const handleKick = () => {
+    if (!selectedUser) return;
+    Alert.alert(
+      "Kick User",
+      `Kick ${selectedUser.nickname} from the room?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Kick", style: "destructive", onPress: () => {
+            kickUser(selectedUser.nickname);
+            setShowUserModal(false);
+          }
+        },
+      ]
+    );
+  };
+
+  const handleBan = (voiceOnly: boolean) => {
+    if (!selectedUser) return;
+    setBanVoiceOnly(voiceOnly);
+    setShowBanInput(true);
+  };
+
+  const confirmBan = () => {
+    if (!selectedUser) return;
+    banUser(selectedUser.nickname, banReason || undefined, banVoiceOnly);
+    setShowUserModal(false);
+    setShowBanInput(false);
+    setBanReason("");
+  };
+
+  const handlePromote = () => {
+    if (!selectedUser) return;
+    Alert.alert(
+      "Promote to Moderator",
+      `Promote ${selectedUser.nickname} to Moderator?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Promote", onPress: () => {
+            promoteUser(selectedUser.nickname);
+            setShowUserModal(false);
+          }
+        },
+      ]
+    );
+  };
+
+  const handleDemote = () => {
+    if (!selectedUser) return;
+    Alert.alert(
+      "Remove Moderator",
+      `Remove moderator role from ${selectedUser.nickname}?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove", style: "destructive", onPress: () => {
+            demoteUser(selectedUser.nickname);
+            setShowUserModal(false);
+          }
+        },
+      ]
+    );
+  };
+
+  const handleMuteText = () => {
+    if (!selectedUser) return;
+    if (selectedUser.isTextMuted) {
+      unmuteUserText(selectedUser.nickname);
+    } else {
+      muteUserText(selectedUser.nickname);
+    }
+    setShowUserModal(false);
+  };
+
   const handleToggleVoice = async () => {
+    if (isVoiceBanned) {
+      Alert.alert("Voice Banned", "You have been voice-banned by the admin.");
+      return;
+    }
     if (!isVoiceEnabled) {
       await startVoice();
     } else {
@@ -212,8 +352,55 @@ export default function ChatScreen() {
     ]);
   };
 
+  const handleClearChat = () => {
+    Alert.alert("Clear Chat", "Clear all messages for everyone in the room?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Clear", style: "destructive", onPress: () => {
+          clearAllMessages();
+          setShowAdminPanel(false);
+        }
+      },
+    ]);
+  };
+
+  const handleShowBanned = () => {
+    requestBannedList();
+    setShowBannedList(true);
+    setShowAdminPanel(false);
+  };
+
+  const handleUnban = (targetNickname: string) => {
+    Alert.alert("Unban", `Unban ${targetNickname}?`, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Unban", onPress: () => unbanUser(targetNickname) },
+    ]);
+  };
+
   return (
     <ScreenContainer containerClassName="bg-black" className="bg-black" edges={["top", "left", "right"]}>
+      {/* Incoming PM notification banner */}
+      {incomingPM && (
+        <View style={styles.pmBanner}>
+          <View style={styles.pmBannerContent}>
+            <Text style={styles.pmBannerTitle}>💬 Private Message</Text>
+            <Text style={styles.pmBannerFrom}>{incomingPM.from} whispers:</Text>
+            <Text style={styles.pmBannerPreview} numberOfLines={1}>{incomingPM.preview}</Text>
+          </View>
+          <View style={styles.pmBannerActions}>
+            <TouchableOpacity
+              style={styles.pmBannerReply}
+              onPress={() => handleOpenPMFromBanner(incomingPM.from)}
+            >
+              <Text style={styles.pmBannerReplyText}>Reply</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.pmBannerDismiss} onPress={dismissIncomingPM}>
+              <Text style={styles.pmBannerDismissText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -229,6 +416,11 @@ export default function ChatScreen() {
             <View style={[styles.connDot, isConnected ? styles.connDotOn : styles.connDotOff]} />
             <Text style={styles.headerRoom}>{roomName}</Text>
             <Text style={styles.headerCount}>[{users.length}]</Text>
+            {isAdmin && (
+              <TouchableOpacity onPress={() => setShowAdminPanel(true)} style={styles.adminBtn}>
+                <Text style={styles.adminBtnText}>👑</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity onPress={handleLeave} style={styles.exitBtn}>
               <Text style={styles.exitBtnText}>EXIT</Text>
             </TouchableOpacity>
@@ -238,7 +430,7 @@ export default function ChatScreen() {
         {/* Welcome banner */}
         <View style={styles.welcomeBanner}>
           <Text style={styles.welcomeText}>
-            Welcome to Later Chat, <Text style={styles.welcomeNick}>{nickname}</Text>
+            Welcome to Later Chat, <Text style={styles.welcomeNick}>{getRoleBadge(myRole)}{nickname}</Text>
           </Text>
           <Text style={styles.welcomeSubText}>
             You are in <Text style={styles.boldText}>{roomName}</Text> (Pull up a chair and have a chat, mate!)
@@ -266,13 +458,17 @@ export default function ChatScreen() {
           {/* Users panel */}
           <View style={styles.usersPanel}>
             <View style={styles.usersPanelHeader}>
-              <Text style={styles.usersPanelTitle}>Chatters</Text>
+              <Text style={styles.usersPanelTitle}>Users ({users.length})</Text>
             </View>
             <FlatList
               data={users}
               keyExtractor={(u) => u.nickname}
               renderItem={({ item }) => (
-                <UserItem user={item} onPress={() => handleUserPress(item)} />
+                <UserItem
+                  user={item}
+                  onPress={() => handleUserPress(item)}
+                  unreadCount={unreadPMs[item.nickname]}
+                />
               )}
               style={styles.usersList}
               showsVerticalScrollIndicator={false}
@@ -283,7 +479,7 @@ export default function ChatScreen() {
         {/* Toolbar */}
         <View style={styles.toolbar}>
           <TouchableOpacity style={styles.toolbarBtn} onPress={() => setInputText((t) => `**${t}**`)}>
-            <Text style={styles.toolbarBtnText}>B</Text>
+            <Text style={[styles.toolbarBtnText, { fontWeight: "bold" }]}>B</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.toolbarBtn} onPress={() => setInputText((t) => `_${t}_`)}>
             <Text style={[styles.toolbarBtnText, { fontStyle: "italic" }]}>I</Text>
@@ -312,16 +508,21 @@ export default function ChatScreen() {
         <View style={styles.inputRow}>
           <Text style={styles.inputLabel}>Chat:</Text>
           <TextInput
-            style={styles.chatInput}
+            style={[styles.chatInput, isTextMuted && styles.chatInputMuted]}
             value={inputText}
             onChangeText={setInputText}
-            placeholder="Type a message..."
+            placeholder={isTextMuted ? "You are muted..." : "Type a message..."}
             placeholderTextColor="#666"
             returnKeyType="send"
             onSubmitEditing={handleSend}
             multiline={false}
+            editable={!isTextMuted}
           />
-          <TouchableOpacity style={styles.sendBtn} onPress={handleSend}>
+          <TouchableOpacity
+            style={[styles.sendBtn, isTextMuted && styles.sendBtnDisabled]}
+            onPress={handleSend}
+            disabled={isTextMuted}
+          >
             <Text style={styles.sendBtnText}>Send</Text>
           </TouchableOpacity>
         </View>
@@ -329,22 +530,28 @@ export default function ChatScreen() {
         {/* Voice bar */}
         <View style={styles.voiceBar}>
           <Text style={styles.voiceLabel}>Voice:</Text>
-          <TouchableOpacity
-            style={[styles.voiceBtn, !isMuted && styles.voiceBtnActive]}
-            onPress={handleToggleVoice}
-          >
-            <Text style={styles.voiceBtnText}>
-              {isMuted ? "🎤 Unmute" : "🔇 Mute"}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.talkBtn} onPress={handleToggleVoice}>
-            <Text style={styles.talkBtnText}>Talk</Text>
-          </TouchableOpacity>
-          <View style={[styles.voiceStatus, !isMuted && styles.voiceStatusActive]}>
-            <Text style={styles.voiceStatusText}>
-              {!isMuted ? "● Active" : "○ Ready"}
-            </Text>
-          </View>
+          {isVoiceBanned ? (
+            <Text style={styles.voiceBannedText}>🚫 Voice banned</Text>
+          ) : (
+            <>
+              <TouchableOpacity
+                style={[styles.voiceBtn, !isMuted && styles.voiceBtnActive]}
+                onPress={handleToggleVoice}
+              >
+                <Text style={styles.voiceBtnText}>
+                  {isMuted ? "🎤 Unmute" : "🔇 Mute"}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.talkBtn} onPress={handleToggleVoice}>
+                <Text style={styles.talkBtnText}>Talk</Text>
+              </TouchableOpacity>
+              <View style={[styles.voiceStatus, !isMuted && styles.voiceStatusActive]}>
+                <Text style={styles.voiceStatusText}>
+                  {!isMuted ? "● Active" : "○ Ready"}
+                </Text>
+              </View>
+            </>
+          )}
           {voiceError ? (
             <Text style={styles.voiceError}>{voiceError}</Text>
           ) : null}
@@ -360,19 +567,168 @@ export default function ChatScreen() {
       >
         <Pressable style={styles.modalOverlay} onPress={() => setShowUserModal(false)}>
           <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>{selectedUser?.nickname}</Text>
+            <Text style={styles.modalTitle}>
+              {getRoleBadge(selectedUser?.role || "user")}{selectedUser?.nickname}
+            </Text>
             <View style={styles.modalDivider} />
+
+            {/* Always available */}
             <TouchableOpacity style={styles.modalOption} onPress={handlePM}>
               <Text style={styles.modalOptionText}>💬 Send Private Message</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.modalOption} onPress={handleIgnore}>
-              <Text style={[styles.modalOptionText, { color: "#FF4444" }]}>🚫 Ignore</Text>
+              <Text style={[styles.modalOptionText, { color: "#FF8800" }]}>🚫 Ignore</Text>
             </TouchableOpacity>
+
+            {/* Moderator actions */}
+            {isMod && selectedUser?.role !== "super_admin" && (
+              <>
+                <View style={styles.modalSectionLabel}>
+                  <Text style={styles.modalSectionLabelText}>— Moderator Actions —</Text>
+                </View>
+                <TouchableOpacity style={styles.modalOption} onPress={handleKick}>
+                  <Text style={[styles.modalOptionText, { color: "#FF4444" }]}>👢 Kick</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.modalOption} onPress={handleMuteText}>
+                  <Text style={[styles.modalOptionText, { color: "#FF8800" }]}>
+                    {selectedUser?.isTextMuted ? "🔊 Unmute Text" : "🔇 Mute Text"}
+                  </Text>
+                </TouchableOpacity>
+              </>
+            )}
+
+            {/* Super Admin only actions */}
+            {isAdmin && selectedUser?.role !== "super_admin" && (
+              <>
+                <View style={styles.modalSectionLabel}>
+                  <Text style={styles.modalSectionLabelText}>— Super Admin Actions —</Text>
+                </View>
+                {!showBanInput ? (
+                  <>
+                    <TouchableOpacity style={styles.modalOption} onPress={() => handleBan(false)}>
+                      <Text style={[styles.modalOptionText, { color: "#CC0000" }]}>🔨 Ban (Full)</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.modalOption} onPress={() => handleBan(true)}>
+                      <Text style={[styles.modalOptionText, { color: "#CC6600" }]}>🎙️ Voice Ban</Text>
+                    </TouchableOpacity>
+                    {selectedUser?.role === "moderator" ? (
+                      <TouchableOpacity style={styles.modalOption} onPress={handleDemote}>
+                        <Text style={[styles.modalOptionText, { color: "#888" }]}>⬇️ Remove Moderator</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <TouchableOpacity style={styles.modalOption} onPress={handlePromote}>
+                        <Text style={[styles.modalOptionText, { color: "#00AAFF" }]}>🛡️ Promote to Moderator</Text>
+                      </TouchableOpacity>
+                    )}
+                  </>
+                ) : (
+                  <View style={styles.banInputArea}>
+                    <Text style={styles.banInputLabel}>
+                      {banVoiceOnly ? "Voice ban" : "Ban"} reason (optional):
+                    </Text>
+                    <TextInput
+                      style={styles.banInput}
+                      value={banReason}
+                      onChangeText={setBanReason}
+                      placeholder="Enter reason..."
+                      placeholderTextColor="#666"
+                      autoFocus
+                    />
+                    <View style={styles.banInputBtns}>
+                      <TouchableOpacity style={styles.banCancelBtn} onPress={() => setShowBanInput(false)}>
+                        <Text style={styles.banCancelBtnText}>Cancel</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.banConfirmBtn} onPress={confirmBan}>
+                        <Text style={styles.banConfirmBtnText}>Confirm</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+              </>
+            )}
+
             <TouchableOpacity style={styles.modalCancel} onPress={() => setShowUserModal(false)}>
               <Text style={styles.modalCancelText}>Cancel</Text>
             </TouchableOpacity>
           </View>
         </Pressable>
+      </Modal>
+
+      {/* Admin Panel Modal */}
+      <Modal
+        visible={showAdminPanel}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowAdminPanel(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setShowAdminPanel(false)}>
+          <View style={[styles.modalBox, { width: 300 }]}>
+            <Text style={[styles.modalTitle, { backgroundColor: "#5A0070" }]}>
+              👑 Super Admin Panel
+            </Text>
+            <View style={styles.modalDivider} />
+            <TouchableOpacity style={styles.modalOption} onPress={handleClearChat}>
+              <Text style={[styles.modalOptionText, { color: "#FF4444" }]}>🗑️ Clear Chat Room</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.modalOption} onPress={handleShowBanned}>
+              <Text style={styles.modalOptionText}>🚫 View Banned Users</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.modalOption} onPress={() => {
+              setShowAdminPanel(false);
+              router.push("/admin" as any);
+            }}>
+              <Text style={styles.modalOptionText}>🔗 Generate Invite Link</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.modalCancel} onPress={() => setShowAdminPanel(false)}>
+              <Text style={styles.modalCancelText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* Banned Users List Modal */}
+      <Modal
+        visible={showBannedList}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowBannedList(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalBox, { width: 320, maxHeight: "70%" }]}>
+            <Text style={[styles.modalTitle, { backgroundColor: "#5A0070" }]}>
+              🚫 Banned Users
+            </Text>
+            <ScrollView style={{ maxHeight: 300 }}>
+              {bannedList.length === 0 ? (
+                <Text style={styles.emptyBannedText}>No banned users.</Text>
+              ) : (
+                bannedList.map((b) => (
+                  <View key={b.id} style={styles.bannedItem}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.bannedNick}>{b.nickname || "(no nickname)"}</Text>
+                      {b.ipAddress && <Text style={styles.bannedIp}>IP: {b.ipAddress}</Text>}
+                      <Text style={styles.bannedType}>
+                        {b.voiceBanOnly ? "Voice ban only" : "Full ban"}
+                        {b.reason ? ` — ${b.reason}` : ""}
+                      </Text>
+                    </View>
+                    {b.nickname && (
+                      <TouchableOpacity
+                        style={styles.unbanBtn}
+                        onPress={() => handleUnban(b.nickname!)}
+                      >
+                        <Text style={styles.unbanBtnText}>Unban</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                ))
+              )}
+            </ScrollView>
+            <TouchableOpacity style={styles.modalCancel} onPress={() => setShowBannedList(false)}>
+              <Text style={styles.modalCancelText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </Modal>
     </ScreenContainer>
   );
@@ -426,6 +782,13 @@ const styles = StyleSheet.create({
     color: "#FFD700",
     fontSize: 12,
     fontWeight: "bold",
+  },
+  adminBtn: {
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+  },
+  adminBtnText: {
+    fontSize: 18,
   },
   exitBtn: {
     backgroundColor: "#5A0070",
@@ -569,9 +932,12 @@ const styles = StyleSheet.create({
   userDotOnline: { backgroundColor: "#00AA00" },
   userDotVoice: { backgroundColor: "#FF6600" },
   userName: {
-    fontSize: 12,
-    color: "#000",
+    fontSize: 11,
     flex: 1,
+  },
+  mutedIcon: {
+    fontSize: 10,
+    marginLeft: 2,
   },
   toolbar: {
     flexDirection: "row",
@@ -594,7 +960,6 @@ const styles = StyleSheet.create({
   toolbarBtnText: {
     color: "#fff",
     fontSize: 13,
-    fontWeight: "bold",
   },
   toolbarSep: {
     color: "#555",
@@ -642,11 +1007,18 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     fontSize: 14,
   },
+  chatInputMuted: {
+    backgroundColor: "#f0f0f0",
+    color: "#999",
+  },
   sendBtn: {
     backgroundColor: "#7B0099",
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 3,
+  },
+  sendBtnDisabled: {
+    backgroundColor: "#444",
   },
   sendBtnText: {
     color: "#fff",
@@ -706,6 +1078,11 @@ const styles = StyleSheet.create({
     color: "#888",
     fontSize: 11,
   },
+  voiceBannedText: {
+    color: "#FF4444",
+    fontSize: 12,
+    flex: 1,
+  },
   voiceError: {
     color: "#FF4444",
     fontSize: 10,
@@ -720,7 +1097,7 @@ const styles = StyleSheet.create({
   modalBox: {
     backgroundColor: "#1a1a1a",
     borderRadius: 8,
-    width: 260,
+    width: 280,
     overflow: "hidden",
     borderWidth: 1,
     borderColor: "#7B0099",
@@ -737,15 +1114,25 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: "#333",
   },
+  modalSectionLabel: {
+    paddingVertical: 6,
+    paddingHorizontal: 20,
+    backgroundColor: "#111",
+  },
+  modalSectionLabelText: {
+    color: "#666",
+    fontSize: 11,
+    textAlign: "center",
+  },
   modalOption: {
-    paddingVertical: 14,
+    paddingVertical: 13,
     paddingHorizontal: 20,
     borderBottomWidth: 1,
     borderBottomColor: "#333",
   },
   modalOptionText: {
     color: "#fff",
-    fontSize: 15,
+    fontSize: 14,
   },
   modalCancel: {
     paddingVertical: 12,
@@ -754,5 +1141,165 @@ const styles = StyleSheet.create({
   modalCancelText: {
     color: "#888",
     fontSize: 14,
+  },
+  banInputArea: {
+    padding: 12,
+    gap: 8,
+  },
+  banInputLabel: {
+    color: "#aaa",
+    fontSize: 12,
+  },
+  banInput: {
+    backgroundColor: "#000",
+    borderWidth: 1,
+    borderColor: "#555",
+    borderRadius: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    color: "#fff",
+    fontSize: 14,
+  },
+  banInputBtns: {
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "flex-end",
+  },
+  banCancelBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 4,
+    backgroundColor: "#333",
+  },
+  banCancelBtnText: {
+    color: "#aaa",
+    fontSize: 13,
+  },
+  banConfirmBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 4,
+    backgroundColor: "#CC0000",
+  },
+  banConfirmBtnText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "bold",
+  },
+  // Banned list
+  emptyBannedText: {
+    color: "#888",
+    textAlign: "center",
+    padding: 20,
+    fontSize: 13,
+  },
+  bannedItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#333",
+    gap: 8,
+  },
+  bannedNick: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 13,
+  },
+  bannedIp: {
+    color: "#888",
+    fontSize: 11,
+  },
+  bannedType: {
+    color: "#FF8800",
+    fontSize: 11,
+  },
+  unbanBtn: {
+    backgroundColor: "#006600",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 4,
+  },
+  unbanBtnText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "bold",
+  },
+  // PM notification banner
+  pmBanner: {
+    position: "absolute" as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 999,
+    backgroundColor: "#3D0050",
+    borderBottomWidth: 2,
+    borderBottomColor: "#FFD700",
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  pmBannerContent: {
+    flex: 1,
+  },
+  pmBannerTitle: {
+    color: "#FFD700",
+    fontWeight: "bold" as const,
+    fontSize: 12,
+    marginBottom: 1,
+  },
+  pmBannerFrom: {
+    color: "#FF9900",
+    fontSize: 12,
+    fontWeight: "600" as const,
+  },
+  pmBannerPreview: {
+    color: "#ddd",
+    fontSize: 12,
+    marginTop: 1,
+  },
+  pmBannerActions: {
+    flexDirection: "row" as const,
+    gap: 6,
+    alignItems: "center" as const,
+  },
+  pmBannerReply: {
+    backgroundColor: "#7B0099",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 4,
+  },
+  pmBannerReplyText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "bold" as const,
+  },
+  pmBannerDismiss: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  pmBannerDismissText: {
+    color: "#aaa",
+    fontSize: 16,
+    fontWeight: "bold" as const,
+  },
+  // Unread PM badge
+  userItemBadge: {
+    backgroundColor: "#FF4444",
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    paddingHorizontal: 3,
+    marginLeft: 4,
+  },
+  userItemBadgeText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "bold" as const,
   },
 });

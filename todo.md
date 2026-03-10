@@ -60,3 +60,21 @@
 - [x] Private messages not delivering to recipient
 - [x] Clear chat messages on logout/rejoin (fresh start each session)
 - [x] Add Clear Chat button (admin only) to wipe the room history
+- [ ] Voice mic toggle should be independent per user (stopping your mic should not affect others)
+- [ ] Invite share message should say "Come to chat now, not later."
+- [ ] Clear chat not working
+- [ ] No notification when receiving a private message (PM badge/alert)
+
+## Admin System
+- [x] Reserved nickname "Ammar" - nobody else can use it
+- [x] First-time password setup for Ammar, saved permanently
+- [x] Super Admin: kick user from room
+- [x] Super Admin: ban user by nickname + IP address
+- [x] Super Admin: voice-ban user (can text but not use mic)
+- [x] Super Admin: promote user to Moderator
+- [x] Super Admin: clear chat room
+- [x] Moderator: kick user
+- [x] Moderator: mute user (cannot send text messages)
+- [x] Role badges in user list (crown for Ammar, shield for Moderator)
+- [x] Admin panel accessible from chat screen
+- [x] Super Admin password reset via email (ammar.hendi@hotmail.com)

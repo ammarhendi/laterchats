@@ -2,11 +2,17 @@ import React, { createContext, useContext, useEffect, useRef, useState, useCallb
 import { io, Socket } from "socket.io-client";
 import { getApiBaseUrl } from "@/constants/oauth";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Alert } from "react-native";
+
+export type UserRole = "super_admin" | "moderator" | "user";
 
 export interface ChatUser {
   nickname: string;
   isMuted: boolean;
   isVoiceActive: boolean;
+  isVoiceBanned?: boolean;
+  isTextMuted?: boolean;
+  role: UserRole;
 }
 
 export interface ChatMessage {
@@ -23,20 +29,42 @@ interface ChatContextType {
   socket: Socket | null;
   isConnected: boolean;
   nickname: string | null;
+  myRole: UserRole;
   roomId: number | null;
   roomName: string;
   users: ChatUser[];
   messages: ChatMessage[];
   privateMessages: Record<string, ChatMessage[]>;
+  unreadPMs: Record<string, number>;
+  incomingPM: { from: string; preview: string } | null;
+  dismissIncomingPM: () => void;
   isMuted: boolean;
+  isVoiceBanned: boolean;
+  isTextMuted: boolean;
+  // Auth
+  requireSuperAdminAuth: boolean;
+  superAdminPasswordSet: boolean;
   joinRoom: (nickname: string, roomId: number, token?: string) => void;
+  authenticateSuperAdmin: (password: string, isSetup: boolean) => void;
   leaveRoom: () => void;
+  // Messaging
   sendMessage: (content: string) => void;
   sendPrivateMessage: (recipientNickname: string, content: string) => void;
   toggleMute: () => void;
   setNickname: (n: string) => void;
   clearMessages: () => void;
   clearAllMessages: () => void;
+  markPMRead: (fromNickname: string) => void;
+  // Admin actions
+  kickUser: (targetNickname: string) => void;
+  banUser: (targetNickname: string, reason?: string, voiceBanOnly?: boolean) => void;
+  unbanUser: (targetNickname: string) => void;
+  promoteUser: (targetNickname: string) => void;
+  demoteUser: (targetNickname: string) => void;
+  muteUserText: (targetNickname: string) => void;
+  unmuteUserText: (targetNickname: string) => void;
+  requestBannedList: () => void;
+  bannedList: Array<{ id: number; nickname?: string | null; ipAddress?: string | null; reason?: string | null; voiceBanOnly: boolean }>;
 }
 
 const ChatContext = createContext<ChatContextType | null>(null);
@@ -45,17 +73,25 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [nickname, setNicknameState] = useState<string | null>(null);
+  const [myRole, setMyRole] = useState<UserRole>("user");
   const [roomId, setRoomId] = useState<number | null>(null);
   const [roomName] = useState("Now");
   const [users, setUsers] = useState<ChatUser[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [privateMessages, setPrivateMessages] = useState<Record<string, ChatMessage[]>>({});
+  const [unreadPMs, setUnreadPMs] = useState<Record<string, number>>({});
+  const [incomingPM, setIncomingPM] = useState<{ from: string; preview: string } | null>(null);
   const [isMuted, setIsMuted] = useState(true);
+  const [isVoiceBanned, setIsVoiceBanned] = useState(false);
+  const [isTextMuted, setIsTextMuted] = useState(false);
+  const [requireSuperAdminAuth, setRequireSuperAdminAuth] = useState(false);
+  const [superAdminPasswordSet, setSuperAdminPasswordSet] = useState(false);
+  const [bannedList, setBannedList] = useState<ChatContextType["bannedList"]>([]);
+  // Pending join info for super admin (stored while waiting for auth)
+  const pendingRoomIdRef = useRef<number | null>(null);
   const socketRef = useRef<Socket | null>(null);
-  // Use a ref for nickname so socket event handlers always see the latest value
   const nicknameRef = useRef<string | null>(null);
 
-  // Load saved nickname
   useEffect(() => {
     AsyncStorage.getItem("later_nickname").then((n) => {
       if (n) {
@@ -71,20 +107,29 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     AsyncStorage.setItem("later_nickname", n);
   }, []);
 
+  const dismissIncomingPM = useCallback(() => setIncomingPM(null), []);
+
+  const markPMRead = useCallback((fromNickname: string) => {
+    setUnreadPMs((prev) => {
+      const next = { ...prev };
+      delete next[fromNickname];
+      return next;
+    });
+  }, []);
+
   const setupSocketListeners = useCallback((sock: Socket) => {
     sock.on("connect", () => {
-      console.log("[Socket] Connected:", sock.id);
       setIsConnected(true);
     });
 
     sock.on("disconnect", () => {
-      console.log("[Socket] Disconnected");
       setIsConnected(false);
     });
 
     sock.on("room_joined", ({ roomId: rId, users: roomUsers }: { roomId: number; nickname: string; users: ChatUser[] }) => {
       setRoomId(rId);
       setUsers(roomUsers);
+      setRequireSuperAdminAuth(false);
     });
 
     sock.on("message_history", (history: ChatMessage[]) => {
@@ -99,13 +144,13 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       setMessages((prev) => [...prev, { ...msg, createdAt: new Date(msg.createdAt) }]);
     });
 
-    // FIX: Use nicknameRef instead of stale closure over nickname state
     sock.on("private_message", (msg: ChatMessage) => {
       const myNick = nicknameRef.current;
       const otherNickname =
         msg.senderNickname === myNick
           ? (msg.recipientNickname ?? msg.senderNickname)
           : msg.senderNickname;
+
       setPrivateMessages((prev) => ({
         ...prev,
         [otherNickname]: [
@@ -113,14 +158,85 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           { ...msg, createdAt: new Date(msg.createdAt) },
         ],
       }));
+
+      if (msg.senderNickname !== myNick) {
+        setUnreadPMs((prev) => ({
+          ...prev,
+          [msg.senderNickname]: (prev[msg.senderNickname] || 0) + 1,
+        }));
+        setIncomingPM({
+          from: msg.senderNickname,
+          preview: msg.content.length > 40 ? msg.content.slice(0, 40) + "..." : msg.content,
+        });
+        setTimeout(() => setIncomingPM(null), 5000);
+      }
     });
 
     sock.on("users_updated", (updatedUsers: ChatUser[]) => {
       setUsers(updatedUsers);
+      // Update my own role from the users list
+      const me = updatedUsers.find((u) => u.nickname === nicknameRef.current);
+      if (me) setMyRole(me.role);
     });
 
     sock.on("room_cleared", () => {
       setMessages([]);
+    });
+
+    // Super admin auth flow
+    sock.on("require_super_admin_auth", ({ isPasswordSet }: { isPasswordSet: boolean }) => {
+      setRequireSuperAdminAuth(true);
+      setSuperAdminPasswordSet(isPasswordSet);
+    });
+
+    sock.on("super_admin_auth_result", ({ success, message }: { success: boolean; message: string }) => {
+      if (!success) {
+        Alert.alert("Authentication Failed", message);
+      }
+      // On success, room_joined will fire automatically
+    });
+
+    // Admin events
+    sock.on("kicked", ({ reason }: { reason: string }) => {
+      Alert.alert("Kicked", reason);
+      socketRef.current?.disconnect();
+      socketRef.current = null;
+      setSocket(null);
+      setIsConnected(false);
+      setRoomId(null);
+      setUsers([]);
+      setMessages([]);
+      setNicknameState(null);
+      nicknameRef.current = null;
+    });
+
+    sock.on("voice_banned", ({ message }: { message: string }) => {
+      setIsVoiceBanned(true);
+      setIsMuted(true);
+      Alert.alert("Voice Banned", message);
+    });
+
+    sock.on("text_muted", ({ message }: { message: string }) => {
+      setIsTextMuted(true);
+      Alert.alert("Muted", message);
+    });
+
+    sock.on("text_unmuted", ({ message }: { message: string }) => {
+      setIsTextMuted(false);
+      Alert.alert("Unmuted", message);
+    });
+
+    sock.on("role_updated", ({ role, message }: { role: UserRole; message: string }) => {
+      setMyRole(role);
+      Alert.alert("Role Updated", message);
+    });
+
+    sock.on("admin_action_result", ({ success, message }: { success: boolean; message: string }) => {
+      Alert.alert(success ? "Success" : "Error", message);
+    });
+
+    sock.on("admin_banned_list", (list: ChatContextType["bannedList"]) => {
+      setBannedList(list);
     });
 
     sock.on("error", ({ message }: { message: string }) => {
@@ -141,21 +257,24 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     });
 
     setupSocketListeners(newSocket);
-
     socketRef.current = newSocket;
     setSocket(newSocket);
     return newSocket;
   }, [setupSocketListeners]);
 
   const joinRoom = useCallback((nick: string, rId: number, token?: string) => {
-    // Clear previous messages on each new join (fresh session)
     setMessages([]);
     setPrivateMessages({});
+    setUnreadPMs({});
+    setIncomingPM(null);
     setUsers([]);
+    setIsVoiceBanned(false);
+    setIsTextMuted(false);
+    setMyRole("user");
 
     const s = initSocket();
     setNickname(nick);
-    setRoomId(rId);
+    pendingRoomIdRef.current = rId;
 
     const doJoin = () => {
       s.emit("join_room", { nickname: nick, roomId: rId, token });
@@ -168,6 +287,12 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     }
   }, [initSocket, setNickname]);
 
+  const authenticateSuperAdmin = useCallback((password: string, isSetup: boolean) => {
+    const rId = pendingRoomIdRef.current ?? 1;
+    socketRef.current?.emit("super_admin_auth", { password, isSetup, roomId: rId });
+    setMyRole("super_admin");
+  }, []);
+
   const leaveRoom = useCallback(() => {
     socketRef.current?.disconnect();
     socketRef.current = null;
@@ -177,7 +302,13 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     setUsers([]);
     setMessages([]);
     setPrivateMessages({});
+    setUnreadPMs({});
+    setIncomingPM(null);
     setIsMuted(true);
+    setIsVoiceBanned(false);
+    setIsTextMuted(false);
+    setRequireSuperAdminAuth(false);
+    setMyRole("user");
   }, []);
 
   const sendMessage = useCallback((content: string) => {
@@ -194,14 +325,44 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     socketRef.current?.emit("toggle_mute", { isMuted: newMuted });
   }, [isMuted]);
 
-  const clearMessages = useCallback(() => {
-    setMessages([]);
-  }, []);
+  const clearMessages = useCallback(() => setMessages([]), []);
 
-  // Admin: clear the entire room chat for everyone
   const clearAllMessages = useCallback(() => {
     socketRef.current?.emit("clear_room");
     setMessages([]);
+  }, []);
+
+  // Admin actions
+  const kickUser = useCallback((targetNickname: string) => {
+    socketRef.current?.emit("admin_kick", { targetNickname });
+  }, []);
+
+  const banUser = useCallback((targetNickname: string, reason?: string, voiceBanOnly?: boolean) => {
+    socketRef.current?.emit("admin_ban", { targetNickname, reason, voiceBanOnly });
+  }, []);
+
+  const unbanUser = useCallback((targetNickname: string) => {
+    socketRef.current?.emit("admin_unban", { targetNickname });
+  }, []);
+
+  const promoteUser = useCallback((targetNickname: string) => {
+    socketRef.current?.emit("admin_promote", { targetNickname });
+  }, []);
+
+  const demoteUser = useCallback((targetNickname: string) => {
+    socketRef.current?.emit("admin_demote", { targetNickname });
+  }, []);
+
+  const muteUserText = useCallback((targetNickname: string) => {
+    socketRef.current?.emit("mod_mute_text", { targetNickname });
+  }, []);
+
+  const unmuteUserText = useCallback((targetNickname: string) => {
+    socketRef.current?.emit("mod_unmute_text", { targetNickname });
+  }, []);
+
+  const requestBannedList = useCallback(() => {
+    socketRef.current?.emit("admin_get_banned");
   }, []);
 
   useEffect(() => {
@@ -216,13 +377,22 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         socket,
         isConnected,
         nickname,
+        myRole,
         roomId,
         roomName,
         users,
         messages,
         privateMessages,
+        unreadPMs,
+        incomingPM,
+        dismissIncomingPM,
         isMuted,
+        isVoiceBanned,
+        isTextMuted,
+        requireSuperAdminAuth,
+        superAdminPasswordSet,
         joinRoom,
+        authenticateSuperAdmin,
         leaveRoom,
         sendMessage,
         sendPrivateMessage,
@@ -230,6 +400,16 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         setNickname,
         clearMessages,
         clearAllMessages,
+        markPMRead,
+        kickUser,
+        banUser,
+        unbanUser,
+        promoteUser,
+        demoteUser,
+        muteUserText,
+        unmuteUserText,
+        requestBannedList,
+        bannedList,
       }}
     >
       {children}

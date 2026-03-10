@@ -81,9 +81,9 @@ export default function AdminScreen() {
     const url = getInviteUrl(token);
     try {
       await Share.share({
-        message: `Join me on Later Chat! This link expires in 6 hours:\n${url}`,
+        message: `Come to chat now, not later.\n${url}`,
         url,
-        title: "Join Later Chat",
+        title: "Come to chat now, not later.",
       });
     } catch (err) {
       console.error(err);

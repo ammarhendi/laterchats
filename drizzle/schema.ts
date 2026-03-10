@@ -53,3 +53,41 @@ export const messages = mysqlTable("messages", {
 
 export type Message = typeof messages.$inferSelect;
 export type InsertMessage = typeof messages.$inferInsert;
+
+// Super admin config (stores hashed password for "Ammar")
+export const superAdminConfig = mysqlTable("super_admin_config", {
+  id: int("id").autoincrement().primaryKey(),
+  passwordHash: varchar("passwordHash", { length: 256 }).notNull(),
+  resetToken: varchar("resetToken", { length: 128 }),
+  resetTokenExpiresAt: timestamp("resetTokenExpiresAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type SuperAdminConfig = typeof superAdminConfig.$inferSelect;
+
+// Banned users (by nickname and/or IP)
+export const bannedUsers = mysqlTable("banned_users", {
+  id: int("id").autoincrement().primaryKey(),
+  nickname: varchar("nickname", { length: 64 }),
+  ipAddress: varchar("ipAddress", { length: 64 }),
+  reason: text("reason"),
+  bannedBy: varchar("bannedBy", { length: 64 }).notNull(),
+  voiceBanOnly: boolean("voiceBanOnly").default(false).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type BannedUser = typeof bannedUsers.$inferSelect;
+export type InsertBannedUser = typeof bannedUsers.$inferInsert;
+
+// Chat roles (moderators promoted by super admin)
+export const chatRoles = mysqlTable("chat_roles", {
+  id: int("id").autoincrement().primaryKey(),
+  nickname: varchar("nickname", { length: 64 }).notNull().unique(),
+  role: mysqlEnum("role", ["moderator"]).notNull(),
+  grantedBy: varchar("grantedBy", { length: 64 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ChatRole = typeof chatRoles.$inferSelect;
+export type InsertChatRole = typeof chatRoles.$inferInsert;
