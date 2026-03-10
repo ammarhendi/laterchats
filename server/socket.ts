@@ -586,9 +586,13 @@ export function initSocketServer(httpServer: HttpServer) {
     // ── Admin: clear room messages ────────────────────────────────────────────
     socket.on("clear_room", async () => {
       const user = activeUsers.get(socket.id);
-      if (!user) return;
+      console.log(`[Socket] clear_room received from ${socket.id}, user: ${user?.nickname}, role: ${user?.role}`);
+      if (!user) {
+        socket.emit("admin_action_result", { success: false, message: "Not in room" });
+        return;
+      }
       if (user.role !== "super_admin") {
-        socket.emit("error", { message: "Only Super Admin can clear the room" });
+        socket.emit("admin_action_result", { success: false, message: "Only Super Admin can clear the room" });
         return;
       }
 
@@ -596,11 +600,19 @@ export function initSocketServer(httpServer: HttpServer) {
         const db = await getDb();
         if (db) {
           await db.delete(messages).where(eq(messages.roomId, user.roomId));
+          console.log(`[Socket] Deleted messages for room ${user.roomId}`);
+        } else {
+          console.warn("[Socket] No DB connection for clear_room");
         }
+        // Broadcast to ALL sockets in the room including sender
         io.to(`room_${user.roomId}`).emit("room_cleared");
+        // Also emit directly to sender in case room emit misses
+        socket.emit("room_cleared");
+        socket.emit("admin_action_result", { success: true, message: "Chat room cleared!" });
         console.log(`[Socket] Room ${user.roomId} cleared by ${user.nickname}`);
       } catch (err) {
         console.error("[Socket] clear_room error:", err);
+        socket.emit("admin_action_result", { success: false, message: "Failed to clear chat: " + (err as Error).message });
       }
     });
 

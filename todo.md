@@ -78,3 +78,6 @@
 - [x] Role badges in user list (crown for Ammar, shield for Moderator)
 - [x] Admin panel accessible from chat screen
 - [x] Super Admin password reset via email (ammar.hendi@hotmail.com)
+- [x] Super Admin cannot be ignored, kicked, banned, or muted by anyone
+- [x] Clear chat still not working (fix end-to-end)
+- [x] Bold text still showing stars in chat messages (formatting not rendering)

@@ -110,7 +110,7 @@ export default function WelcomeScreen() {
           {/* Logo */}
           <View style={styles.logoArea}>
             <Image
-              source={require("../assets/images/icon.png")}
+              source={{ uri: "https://d2xsxph8kpxj0f.cloudfront.net/310519663401644709/NzGynwH9ginkrkq4LKn7H4/icon-39CEi9zvX3FBgh8hCwF9w9.png" }}
               style={styles.logo}
               resizeMode="contain"
             />

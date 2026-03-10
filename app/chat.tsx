@@ -245,6 +245,7 @@ export default function ChatScreen() {
   };
 
   const handleIgnore = () => {
+    if (selectedUser?.role === "super_admin") return;
     setShowUserModal(false);
     Alert.alert("Ignored", `${selectedUser?.nickname} has been ignored.`);
   };
@@ -357,6 +358,10 @@ export default function ChatScreen() {
       { text: "Cancel", style: "cancel" },
       {
         text: "Clear", style: "destructive", onPress: () => {
+          if (!isConnected) {
+            Alert.alert("Error", "Not connected to server. Please wait and try again.");
+            return;
+          }
           clearAllMessages();
           setShowAdminPanel(false);
         }
@@ -478,10 +483,24 @@ export default function ChatScreen() {
 
         {/* Toolbar */}
         <View style={styles.toolbar}>
-          <TouchableOpacity style={styles.toolbarBtn} onPress={() => setInputText((t) => `**${t}**`)}>
+          <TouchableOpacity style={styles.toolbarBtn} onPress={() => {
+            const trimmed = inputText.trim();
+            if (trimmed) {
+              setInputText(`**${trimmed}**`);
+            } else {
+              setInputText("**bold text**");
+            }
+          }}>
             <Text style={[styles.toolbarBtnText, { fontWeight: "bold" }]}>B</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.toolbarBtn} onPress={() => setInputText((t) => `_${t}_`)}>
+          <TouchableOpacity style={styles.toolbarBtn} onPress={() => {
+            const trimmed = inputText.trim();
+            if (trimmed) {
+              setInputText(`_${trimmed}_`);
+            } else {
+              setInputText("_italic text_");
+            }
+          }}>
             <Text style={[styles.toolbarBtnText, { fontStyle: "italic" }]}>I</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.toolbarBtn} onPress={() => setShowEmoji(!showEmoji)}>
@@ -576,9 +595,11 @@ export default function ChatScreen() {
             <TouchableOpacity style={styles.modalOption} onPress={handlePM}>
               <Text style={styles.modalOptionText}>💬 Send Private Message</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.modalOption} onPress={handleIgnore}>
-              <Text style={[styles.modalOptionText, { color: "#FF8800" }]}>🚫 Ignore</Text>
-            </TouchableOpacity>
+            {selectedUser?.role !== "super_admin" && (
+              <TouchableOpacity style={styles.modalOption} onPress={handleIgnore}>
+                <Text style={[styles.modalOptionText, { color: "#FF8800" }]}>🚫 Ignore</Text>
+              </TouchableOpacity>
+            )}
 
             {/* Moderator actions */}
             {isMod && selectedUser?.role !== "super_admin" && (
