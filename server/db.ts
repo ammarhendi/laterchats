@@ -1,7 +1,8 @@
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
+import { InsertUser, users, rooms, inviteTokens, messages, Room, InviteToken, Message } from "../drizzle/schema";
 import { ENV } from "./_core/env";
+import crypto from "crypto";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -89,4 +90,70 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// TODO: add feature queries here as your schema grows.
+// Room functions
+export async function getActiveRoom(): Promise<Room | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(rooms).where(eq(rooms.isActive, true)).limit(1);
+  return result[0];
+}
+
+export async function ensureDefaultRoom(): Promise<Room> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  let room = await getActiveRoom();
+  if (!room) {
+    await db.insert(rooms).values({
+      name: "The Local2",
+      description: "Pull up a chair and have a chat, mate!",
+      isActive: true,
+    });
+    room = await getActiveRoom();
+  }
+  return room!;
+}
+
+// Invite token functions
+export async function generateInviteToken(roomId: number): Promise<InviteToken> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const token = crypto.randomBytes(32).toString("hex");
+  const expiresAt = new Date(Date.now() + 6 * 60 * 60 * 1000); // 6 hours
+
+  await db.insert(inviteTokens).values({ token, roomId, expiresAt });
+  const result = await db.select().from(inviteTokens).where(eq(inviteTokens.token, token)).limit(1);
+  return result[0];
+}
+
+export async function validateInviteToken(token: string): Promise<{ valid: boolean; roomId?: number; message?: string }> {
+  const db = await getDb();
+  if (!db) {
+    return { valid: true, roomId: 1 };
+  }
+
+  const result = await db.select().from(inviteTokens).where(eq(inviteTokens.token, token)).limit(1);
+  if (!result.length) return { valid: false, message: "Invalid invite link" };
+
+  const tokenRecord = result[0];
+  if (tokenRecord.expiresAt < new Date()) return { valid: false, message: "This invite link has expired" };
+
+  return { valid: true, roomId: tokenRecord.roomId };
+}
+
+export async function getLatestInviteToken(roomId: number): Promise<InviteToken | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(inviteTokens).where(eq(inviteTokens.roomId, roomId)).limit(10);
+  const now = new Date();
+  const valid = result.filter((t) => t.expiresAt > now);
+  return valid[valid.length - 1];
+}
+
+// Message functions
+export async function getRecentMessages(roomId: number, limit = 50): Promise<Message[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(messages).where(eq(messages.roomId, roomId)).limit(limit);
+}

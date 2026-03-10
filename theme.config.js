@@ -1,14 +1,19 @@
 /** @type {const} */
 const themeColors = {
-  primary: { light: '#0a7ea4', dark: '#0a7ea4' },
-  background: { light: '#ffffff', dark: '#151718' },
-  surface: { light: '#f5f5f5', dark: '#1e2022' },
-  foreground: { light: '#11181C', dark: '#ECEDEE' },
-  muted: { light: '#687076', dark: '#9BA1A6' },
-  border: { light: '#E5E7EB', dark: '#334155' },
-  success: { light: '#22C55E', dark: '#4ADE80' },
-  warning: { light: '#F59E0B', dark: '#FBBF24' },
-  error: { light: '#EF4444', dark: '#F87171' },
+  primary: { light: '#7B0099', dark: '#9B30C0' },       // Yahoo purple
+  background: { light: '#ECE9D8', dark: '#1A1A2E' },    // Classic Windows XP gray-beige / dark
+  surface: { light: '#FFFFFF', dark: '#252540' },        // White cards
+  foreground: { light: '#000000', dark: '#EEEEEE' },     // Black text
+  muted: { light: '#666666', dark: '#9BA1A6' },          // Gray text
+  border: { light: '#ACA899', dark: '#444466' },         // Classic border
+  success: { light: '#008000', dark: '#33CC33' },        // Online green
+  warning: { light: '#FF6600', dark: '#FF8833' },        // Voice orange
+  error: { light: '#CC0000', dark: '#F87171' },          // Error red
+  accent: { light: '#FFD700', dark: '#FFD700' },         // Yahoo gold
+  header: { light: '#7B0099', dark: '#5A0070' },         // Header purple
+  chatbg: { light: '#FFFFFF', dark: '#1E1E3A' },         // Chat area background
+  systemmsg: { light: '#008000', dark: '#33AA33' },      // System message green
+  tint: { light: '#7B0099', dark: '#9B30C0' },           // Tint color
 };
 
 module.exports = { themeColors };

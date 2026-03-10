@@ -6,6 +6,7 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
+import { initSocketServer } from "../socket";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise((resolve) => {
@@ -75,8 +76,12 @@ async function startServer() {
     console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
   }
 
+  // Initialize Socket.io
+  initSocketServer(server);
+
   server.listen(port, () => {
     console.log(`[api] server listening on port ${port}`);
+    console.log(`[socket] Socket.io server initialized`);
   });
 }
 

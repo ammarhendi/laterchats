@@ -1,7 +1,9 @@
+import { z } from "zod";
 import { COOKIE_NAME } from "../shared/const.js";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router } from "./_core/trpc";
+import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import * as db from "./db";
 
 export const appRouter = router({
   // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -17,12 +19,41 @@ export const appRouter = router({
     }),
   }),
 
-  // TODO: add feature routers here, e.g.
-  // todo: router({
-  //   list: protectedProcedure.query(({ ctx }) =>
-  //     db.getUserTodos(ctx.user.id)
-  //   ),
-  // }),
+  chat: router({
+    getRoom: publicProcedure.query(async () => {
+      try {
+        const room = await db.ensureDefaultRoom();
+        return room;
+      } catch {
+        return { id: 1, name: "The Local2", description: "Pull up a chair and have a chat, mate!", isActive: true, createdAt: new Date() };
+      }
+    }),
+
+    validateToken: publicProcedure
+      .input(z.object({ token: z.string() }))
+      .query(async ({ input }) => {
+        return db.validateInviteToken(input.token);
+      }),
+
+    generateInvite: protectedProcedure.mutation(async () => {
+      const room = await db.ensureDefaultRoom();
+      const token = await db.generateInviteToken(room.id);
+      return { token: token.token, expiresAt: token.expiresAt };
+    }),
+
+    getLatestInvite: protectedProcedure.query(async () => {
+      const room = await db.ensureDefaultRoom();
+      const token = await db.getLatestInviteToken(room.id);
+      if (!token) return null;
+      return { token: token.token, expiresAt: token.expiresAt };
+    }),
+
+    getMessages: publicProcedure
+      .input(z.object({ roomId: z.number() }))
+      .query(async ({ input }) => {
+        return db.getRecentMessages(input.roomId, 50);
+      }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;

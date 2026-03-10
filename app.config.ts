@@ -28,11 +28,11 @@ const schemeFromBundleId = `manus${timestamp}`;
 
 const env = {
   // App branding - update these values directly (do not use env vars)
-  appName: "Later - Voice & Text Chat App",
+  appName: "Later",
   appSlug: "later",
   // S3 URL of the app logo - set this to the URL returned by generate_image when creating custom logo
   // Leave empty to use the default icon from assets/images/icon.png
-  logoUrl: "",
+  logoUrl: "https://d2xsxph8kpxj0f.cloudfront.net/310519663401644709/NzGynwH9ginkrkq4LKn7H4/icon-39CEi9zvX3FBgh8hCwF9w9.png",
   scheme: schemeFromBundleId,
   iosBundleId: bundleId,
   androidPackage: bundleId,
@@ -43,7 +43,7 @@ const config: ExpoConfig = {
   slug: env.appSlug,
   version: "1.0.0",
   orientation: "portrait",
-  icon: "./assets/images/icon.png",
+  icon: "https://d2xsxph8kpxj0f.cloudfront.net/310519663401644709/NzGynwH9ginkrkq4LKn7H4/icon_7a96bea8.png",
   scheme: env.scheme,
   userInterfaceStyle: "automatic",
   newArchEnabled: true,
@@ -57,7 +57,7 @@ const config: ExpoConfig = {
   android: {
     adaptiveIcon: {
       backgroundColor: "#E6F4FE",
-      foregroundImage: "./assets/images/android-icon-foreground.png",
+      foregroundImage: "https://d2xsxph8kpxj0f.cloudfront.net/310519663401644709/NzGynwH9ginkrkq4LKn7H4/android-icon-foreground_b724b0ba.png",
       backgroundImage: "./assets/images/android-icon-background.png",
       monochromeImage: "./assets/images/android-icon-monochrome.png",
     },
@@ -82,7 +82,7 @@ const config: ExpoConfig = {
   web: {
     bundler: "metro",
     output: "static",
-    favicon: "./assets/images/favicon.png",
+    favicon: "https://d2xsxph8kpxj0f.cloudfront.net/310519663401644709/NzGynwH9ginkrkq4LKn7H4/favicon_bd45ff04.png",
   },
   plugins: [
     "expo-router",
@@ -102,7 +102,7 @@ const config: ExpoConfig = {
     [
       "expo-splash-screen",
       {
-        image: "./assets/images/splash-icon.png",
+        image: "https://d2xsxph8kpxj0f.cloudfront.net/310519663401644709/NzGynwH9ginkrkq4LKn7H4/splash-icon_0de3657c.png",
         imageWidth: 200,
         resizeMode: "contain",
         backgroundColor: "#ffffff",
