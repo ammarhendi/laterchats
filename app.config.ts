@@ -86,7 +86,6 @@ const config: ExpoConfig = {
   },
   plugins: [
     "expo-router",
-    "react-native-webrtc",
     [
       "expo-audio",
       {

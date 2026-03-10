@@ -56,3 +56,7 @@
 - [x] Bold text formatting shows **stars** instead of rendering bold visually
 - [x] Verify and fix voice/audio chat WebRTC functionality
 - [x] Rename chat room from "The Local2" to "Now"
+- [x] Voice chat not working between two browser users (no audio heard)
+- [x] Private messages not delivering to recipient
+- [x] Clear chat messages on logout/rejoin (fresh start each session)
+- [x] Add Clear Chat button (admin only) to wipe the room history

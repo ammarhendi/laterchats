@@ -27,7 +27,7 @@ interface ChatContextType {
   roomName: string;
   users: ChatUser[];
   messages: ChatMessage[];
-  privateMessages: Record<string, ChatMessage[]>; // keyed by other user's nickname
+  privateMessages: Record<string, ChatMessage[]>;
   isMuted: boolean;
   joinRoom: (nickname: string, roomId: number, token?: string) => void;
   leaveRoom: () => void;
@@ -36,6 +36,7 @@ interface ChatContextType {
   toggleMute: () => void;
   setNickname: (n: string) => void;
   clearMessages: () => void;
+  clearAllMessages: () => void;
 }
 
 const ChatContext = createContext<ChatContextType | null>(null);
@@ -45,23 +46,86 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [isConnected, setIsConnected] = useState(false);
   const [nickname, setNicknameState] = useState<string | null>(null);
   const [roomId, setRoomId] = useState<number | null>(null);
-  const [roomName, setRoomName] = useState("Now");
+  const [roomName] = useState("Now");
   const [users, setUsers] = useState<ChatUser[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [privateMessages, setPrivateMessages] = useState<Record<string, ChatMessage[]>>({});
   const [isMuted, setIsMuted] = useState(true);
   const socketRef = useRef<Socket | null>(null);
+  // Use a ref for nickname so socket event handlers always see the latest value
+  const nicknameRef = useRef<string | null>(null);
 
   // Load saved nickname
   useEffect(() => {
     AsyncStorage.getItem("later_nickname").then((n) => {
-      if (n) setNicknameState(n);
+      if (n) {
+        setNicknameState(n);
+        nicknameRef.current = n;
+      }
     });
   }, []);
 
   const setNickname = useCallback((n: string) => {
     setNicknameState(n);
+    nicknameRef.current = n;
     AsyncStorage.setItem("later_nickname", n);
+  }, []);
+
+  const setupSocketListeners = useCallback((sock: Socket) => {
+    sock.on("connect", () => {
+      console.log("[Socket] Connected:", sock.id);
+      setIsConnected(true);
+    });
+
+    sock.on("disconnect", () => {
+      console.log("[Socket] Disconnected");
+      setIsConnected(false);
+    });
+
+    sock.on("room_joined", ({ roomId: rId, users: roomUsers }: { roomId: number; nickname: string; users: ChatUser[] }) => {
+      setRoomId(rId);
+      setUsers(roomUsers);
+    });
+
+    sock.on("message_history", (history: ChatMessage[]) => {
+      setMessages(history.map((m) => ({ ...m, createdAt: new Date(m.createdAt) })));
+    });
+
+    sock.on("new_message", (msg: ChatMessage) => {
+      setMessages((prev) => [...prev, { ...msg, createdAt: new Date(msg.createdAt) }]);
+    });
+
+    sock.on("system_message", (msg: ChatMessage) => {
+      setMessages((prev) => [...prev, { ...msg, createdAt: new Date(msg.createdAt) }]);
+    });
+
+    // FIX: Use nicknameRef instead of stale closure over nickname state
+    sock.on("private_message", (msg: ChatMessage) => {
+      const myNick = nicknameRef.current;
+      const otherNickname =
+        msg.senderNickname === myNick
+          ? (msg.recipientNickname ?? msg.senderNickname)
+          : msg.senderNickname;
+      setPrivateMessages((prev) => ({
+        ...prev,
+        [otherNickname]: [
+          ...(prev[otherNickname] || []),
+          { ...msg, createdAt: new Date(msg.createdAt) },
+        ],
+      }));
+    });
+
+    sock.on("users_updated", (updatedUsers: ChatUser[]) => {
+      setUsers(updatedUsers);
+    });
+
+    sock.on("room_cleared", () => {
+      setMessages([]);
+    });
+
+    sock.on("error", ({ message }: { message: string }) => {
+      console.error("[Socket] Error:", message);
+    });
   }, []);
 
   const initSocket = useCallback(() => {
@@ -76,65 +140,31 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       reconnectionDelay: 1000,
     });
 
-    newSocket.on("connect", () => {
-      console.log("[Socket] Connected:", newSocket.id);
-      setIsConnected(true);
-    });
-
-    newSocket.on("disconnect", () => {
-      console.log("[Socket] Disconnected");
-      setIsConnected(false);
-    });
-
-    newSocket.on("room_joined", ({ roomId: rId, users: roomUsers }: { roomId: number; nickname: string; users: ChatUser[] }) => {
-      setRoomId(rId);
-      setUsers(roomUsers);
-    });
-
-    newSocket.on("message_history", (history: ChatMessage[]) => {
-      setMessages(history.map((m) => ({ ...m, createdAt: new Date(m.createdAt) })));
-    });
-
-    newSocket.on("new_message", (msg: ChatMessage) => {
-      setMessages((prev) => [...prev, { ...msg, createdAt: new Date(msg.createdAt) }]);
-    });
-
-    newSocket.on("system_message", (msg: ChatMessage) => {
-      setMessages((prev) => [...prev, { ...msg, createdAt: new Date(msg.createdAt) }]);
-    });
-
-    newSocket.on("private_message", (msg: ChatMessage) => {
-      const otherNickname = msg.senderNickname === nickname ? msg.recipientNickname! : msg.senderNickname;
-      setPrivateMessages((prev) => ({
-        ...prev,
-        [otherNickname]: [...(prev[otherNickname] || []), { ...msg, createdAt: new Date(msg.createdAt) }],
-      }));
-    });
-
-    newSocket.on("users_updated", (updatedUsers: ChatUser[]) => {
-      setUsers(updatedUsers);
-    });
-
-    newSocket.on("error", ({ message }: { message: string }) => {
-      console.error("[Socket] Error:", message);
-    });
+    setupSocketListeners(newSocket);
 
     socketRef.current = newSocket;
     setSocket(newSocket);
     return newSocket;
-  }, [nickname]);
+  }, [setupSocketListeners]);
 
   const joinRoom = useCallback((nick: string, rId: number, token?: string) => {
+    // Clear previous messages on each new join (fresh session)
+    setMessages([]);
+    setPrivateMessages({});
+    setUsers([]);
+
     const s = initSocket();
     setNickname(nick);
     setRoomId(rId);
 
-    if (s.connected) {
+    const doJoin = () => {
       s.emit("join_room", { nickname: nick, roomId: rId, token });
+    };
+
+    if (s.connected) {
+      doJoin();
     } else {
-      s.once("connect", () => {
-        s.emit("join_room", { nickname: nick, roomId: rId, token });
-      });
+      s.once("connect", doJoin);
     }
   }, [initSocket, setNickname]);
 
@@ -146,6 +176,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     setRoomId(null);
     setUsers([]);
     setMessages([]);
+    setPrivateMessages({});
     setIsMuted(true);
   }, []);
 
@@ -164,6 +195,12 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   }, [isMuted]);
 
   const clearMessages = useCallback(() => {
+    setMessages([]);
+  }, []);
+
+  // Admin: clear the entire room chat for everyone
+  const clearAllMessages = useCallback(() => {
+    socketRef.current?.emit("clear_room");
     setMessages([]);
   }, []);
 
@@ -192,6 +229,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         toggleMute,
         setNickname,
         clearMessages,
+        clearAllMessages,
       }}
     >
       {children}

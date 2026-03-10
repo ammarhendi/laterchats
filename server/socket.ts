@@ -278,6 +278,26 @@ export function initSocketServer(httpServer: HttpServer) {
       socket.emit("peers_list", { peers });
     });
 
+    // Admin: clear room messages for everyone
+    socket.on("clear_room", async () => {
+      const user = activeUsers.get(socket.id);
+      if (!user) return;
+
+      try {
+        const db = await getDb();
+        if (db) {
+          const { messages: messagesTable } = await import("../drizzle/schema.js");
+          const { eq: eqFn } = await import("drizzle-orm");
+          await db.delete(messagesTable).where(eqFn(messagesTable.roomId, user.roomId));
+        }
+        // Notify all users in the room to clear their chat
+        io.to(`room_${user.roomId}`).emit("room_cleared");
+        console.log(`[Socket] Room ${user.roomId} cleared by ${user.nickname}`);
+      } catch (err) {
+        console.error("[Socket] clear_room error:", err);
+      }
+    });
+
     // Disconnect
     socket.on("disconnect", () => {
       const user = activeUsers.get(socket.id);

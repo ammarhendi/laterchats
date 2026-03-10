@@ -47,7 +47,7 @@ function timeUntilExpiry(date: Date | string): string {
 
 export default function AdminScreen() {
   const router = useRouter();
-  const { users, nickname } = useChat();
+  const { users, nickname, clearAllMessages } = useChat();
   const [generatedToken, setGeneratedToken] = useState<string | null>(null);
   const [generatedExpiry, setGeneratedExpiry] = useState<Date | null>(null);
   const [copied, setCopied] = useState(false);
@@ -111,7 +111,7 @@ export default function AdminScreen() {
             <Text style={styles.sectionTitle}>Room Status</Text>
             <View style={styles.statusRow}>
               <View style={styles.statusDot} />
-              <Text style={styles.statusText}>The Local2 — Active</Text>
+              <Text style={styles.statusText}>Now — Active</Text>
             </View>
             <Text style={styles.statusSub}>{users.length} user{users.length !== 1 ? "s" : ""} currently in room</Text>
             {users.length > 0 && (
@@ -124,6 +124,36 @@ export default function AdminScreen() {
                 ))}
               </View>
             )}
+          </View>
+
+          {/* Clear Chat */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Moderation</Text>
+            <Text style={styles.sectionDesc}>
+              Clear all messages from the room. This will wipe the chat history for everyone currently in the room.
+            </Text>
+            <TouchableOpacity
+              style={styles.clearBtn}
+              onPress={() =>
+                Alert.alert(
+                  "Clear Chat",
+                  "This will delete all messages in the room for everyone. Are you sure?",
+                  [
+                    { text: "Cancel", style: "cancel" },
+                    {
+                      text: "Clear",
+                      style: "destructive",
+                      onPress: () => {
+                        clearAllMessages();
+                        Alert.alert("Done", "Chat room has been cleared.");
+                      },
+                    },
+                  ]
+                )
+              }
+            >
+              <Text style={styles.clearBtnText}>🗑️ Clear Chat Room</Text>
+            </TouchableOpacity>
           </View>
 
           {/* Invite Link Generator */}
@@ -366,5 +396,18 @@ const styles = StyleSheet.create({
     color: "#888",
     fontSize: 13,
     lineHeight: 22,
+  },
+  clearBtn: {
+    backgroundColor: "#8B0000",
+    paddingVertical: 12,
+    borderRadius: 6,
+    alignItems: "center" as const,
+    borderWidth: 1,
+    borderColor: "#CC0000",
+  },
+  clearBtnText: {
+    color: "#fff",
+    fontWeight: "bold" as const,
+    fontSize: 15,
   },
 });
