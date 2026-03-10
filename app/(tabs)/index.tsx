@@ -303,14 +303,12 @@ export default function WelcomeScreen() {
               onPress={() => handleRoomSelect(item.id)}
               activeOpacity={0.75}
             >
-              <View style={styles.roomCardLeft}>
-                <Text style={styles.roomIcon}>{ROOM_ICONS[item.name] ?? "💬"}</Text>
-              </View>
               <View style={styles.roomCardContent}>
                 <Text style={styles.roomCardName}>{item.name}</Text>
                 <Text style={styles.roomCardDesc} numberOfLines={1}>{item.description}</Text>
               </View>
               <Text style={styles.roomCardArrow}>›</Text>
+
             </TouchableOpacity>
           )}
           ListHeaderComponent={
@@ -571,7 +569,7 @@ export default function WelcomeScreen() {
             <View style={styles.roomPreviewGrid}>
               {FALLBACK_ROOMS.map((r) => (
                 <View key={r.id} style={styles.roomPill}>
-                  <Text style={styles.roomPillText}>{ROOM_ICONS[r.name]} {r.name}</Text>
+                  <Text style={styles.roomPillText}>{r.name}</Text>
                 </View>
               ))}
             </View>

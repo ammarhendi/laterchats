@@ -624,8 +624,10 @@ export function initSocketServer(httpServer: HttpServer) {
         } else {
           console.warn("[Socket] No DB connection for clear_room");
         }
-        // Broadcast room_cleared to ALL users in the room
+        // Broadcast room_cleared to ALL users in the room (including sender)
         io.to(`room_${user.roomId}`).emit("room_cleared");
+        // Also emit directly to sender in case they're not in the room socket group
+        socket.emit("room_cleared");
         console.log(`[Socket] Room ${user.roomId} cleared by ${user.nickname}`);
         if (ack) ack({ success: true });
       } catch (err) {

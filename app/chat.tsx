@@ -132,9 +132,9 @@ function MessageItem({ msg, myNickname }: { msg: ChatMessage; myNickname: string
           <Text style={[styles.msgNickname, { color: senderColor }]}>
             {isMe ? `To ${msg.recipientNickname}` : msg.senderNickname}
           </Text>
-          <Text style={styles.msgSays}> whispers: </Text>
+          <Text style={styles.msgSays}>: </Text>
+          <Text style={styles.privateMsgContent}>{msg.content}</Text>
         </Text>
-        <RichText text={`"${msg.content}"`} baseStyle={styles.privateMsgContent} />
       </View>
     );
   }
@@ -149,9 +149,9 @@ function MessageItem({ msg, myNickname }: { msg: ChatMessage; myNickname: string
         <Text style={[styles.msgNickname, { color: nicknameColor }]}>
           {msg.senderNickname}
         </Text>
-        <Text style={styles.msgSays}> says: </Text>
+        <Text style={styles.msgSays}>: </Text>
+        <Text style={styles.msgContent}>{msg.content}</Text>
       </Text>
-      <RichText text={`"${msg.content}"`} baseStyle={styles.msgContent} />
     </View>
   );
 }
@@ -403,6 +403,7 @@ export default function ChatScreen() {
       {
         text: "Leave", style: "destructive", onPress: () => {
           leaveRoom();
+          // Navigate immediately — don't rely on nickname useEffect
           router.replace("/" as any);
         }
       },

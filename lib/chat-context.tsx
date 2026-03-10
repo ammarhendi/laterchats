@@ -324,6 +324,10 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     setIsTextMuted(false);
     setRequireSuperAdminAuth(false);
     setMyRole("user");
+    // Clear nickname so chat screen redirects back to home
+    setNicknameState(null);
+    nicknameRef.current = null;
+    AsyncStorage.removeItem("later_nickname").catch(() => {});
   }, []);
 
   const sendMessage = useCallback((content: string) => {
@@ -348,6 +352,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       Alert.alert("Error", "Not connected to server");
       return;
     }
+    // Optimistically clear local messages immediately
+    setMessages([]);
     // Use socket clear_room — server deletes from DB and broadcasts room_cleared to ALL users in the room
     sock.emit("clear_room", (result: { success: boolean; message?: string }) => {
       if (!result?.success) {
