@@ -231,8 +231,9 @@ export default function ChatScreen() {
   const { data: roomsData } = trpc.chat.getAllRooms.useQuery(undefined, { retry: 1 });
   const availableRooms = roomsData && roomsData.length > 0 ? roomsData : FALLBACK_ROOMS;
 
-  const isAdmin = myRole === "super_admin";
-  const isMod = myRole === "moderator" || myRole === "super_admin";
+  // isAdmin: check both myRole AND nickname — nickname is the ground truth for super admin
+  const isAdmin = myRole === "super_admin" || (nickname ? isSuperAdminName(nickname) : false);
+  const isMod = myRole === "moderator" || myRole === "super_admin" || (nickname ? isSuperAdminName(nickname) : false);
 
   // Redirect to home if no nickname
   useEffect(() => {
@@ -497,7 +498,7 @@ export default function ChatScreen() {
                   }}
                   style={styles.clearBtn}
                 >
-                  <Text style={styles.clearBtnText}>🗑️</Text>
+                  <Text style={styles.clearBtnText}>Clear Chat</Text>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => setShowAdminPanel(true)} style={styles.adminBtn}>
                   <Text style={styles.adminBtnText}>👑</Text>
@@ -1107,12 +1108,16 @@ const styles = StyleSheet.create({
     borderColor: "#FFD700",
   },
   clearBtn: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    backgroundColor: "#CC0000",
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 3,
     marginRight: 2,
   },
   clearBtnText: {
-    fontSize: 18,
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "bold",
   },
   roomSwitchBtn: {
     backgroundColor: "#5A0070",

@@ -272,9 +272,8 @@ export default function WelcomeScreen() {
   const handleShare = async () => {
     try {
       await Share.share({
-        title: "Later — Voice & Text Chat",
-        message:
-          "Don't waste your time and don't be late — chat on Later! 🚀\n\nJoin the conversation: https://later.app",
+        title: "Join Later Chat",
+        message: "Join Later Chat — later.chat",
       });
     } catch {}
   };

@@ -177,8 +177,15 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     sock.on("users_updated", (updatedUsers: ChatUser[]) => {
       setUsers(updatedUsers);
       // Update my own role from the users list
-      const me = updatedUsers.find((u) => u.nickname === nicknameRef.current);
-      if (me) setMyRole(me.role);
+      const myNick = nicknameRef.current;
+      if (myNick) {
+        const me = updatedUsers.find((u) => u.nickname.toLowerCase() === myNick.toLowerCase());
+        if (me) {
+          setMyRole(me.role);
+        }
+        // If not found in list but nickname is a super admin name, keep super_admin role
+        // This handles the case where users_updated fires before the super admin appears in the list
+      }
     });
 
     sock.on("room_cleared", () => {
