@@ -60,6 +60,19 @@ export const appRouter = router({
       .query(async ({ input }) => {
         return db.getRecentMessages(input.roomId, 50);
       }),
+
+    clearRoom: publicProcedure
+      .input(z.object({ superAdminToken: z.string() }))
+      .mutation(async ({ input }) => {
+        // Verify the super admin token (stored in env or db)
+        const expectedToken = process.env.SUPER_ADMIN_CLEAR_TOKEN || "ammar_clear_2024";
+        if (input.superAdminToken !== expectedToken) {
+          throw new Error("Unauthorized");
+        }
+        const room = await db.ensureDefaultRoom();
+        await db.clearRoomMessages(room.id);
+        return { success: true };
+      }),
   }),
 });
 

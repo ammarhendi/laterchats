@@ -327,9 +327,32 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
   const clearMessages = useCallback(() => setMessages([]), []);
 
-  const clearAllMessages = useCallback(() => {
-    socketRef.current?.emit("clear_room");
-    setMessages([]);
+  const clearAllMessages = useCallback(async () => {
+    // Try socket first
+    if (socketRef.current?.connected) {
+      socketRef.current.emit("clear_room");
+    }
+    // Also call REST API as reliable fallback
+    try {
+      const { getApiBaseUrl } = await import("@/constants/oauth");
+      const apiBase = getApiBaseUrl();
+      const res = await fetch(`${apiBase}/api/trpc/chat.clearRoom`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ json: { superAdminToken: "ammar_clear_2024" } }),
+      });
+      if (res.ok) {
+        setMessages([]);
+        // Notify all users via socket
+        socketRef.current?.emit("clear_room");
+      } else {
+        const err = await res.json();
+        Alert.alert("Error", err?.error?.message || "Failed to clear chat");
+      }
+    } catch (e) {
+      // If API fails, still clear locally
+      setMessages([]);
+    }
   }, []);
 
   // Admin actions

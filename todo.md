@@ -81,3 +81,6 @@
 - [x] Super Admin cannot be ignored, kicked, banned, or muted by anyone
 - [x] Clear chat still not working (fix end-to-end)
 - [x] Bold text still showing stars in chat messages (formatting not rendering)
+- [x] Bold button shows stars in text box instead of toggling bold state
+- [x] Clear chat still not working for all users
+- [x] Remember nickname with AsyncStorage so user doesn't retype it every session

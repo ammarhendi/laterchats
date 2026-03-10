@@ -13,8 +13,11 @@ import {
   Alert,
 } from "react-native";
 import { useRouter } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ScreenContainer } from "@/components/screen-container";
 import { useChat } from "@/lib/chat-context";
+
+const SAVED_NICKNAME_KEY = "@later_saved_nickname";
 
 const SUPER_ADMIN_NICKNAME = "Ammar";
 const DEFAULT_ROOM_ID = 1;
@@ -36,6 +39,13 @@ export default function WelcomeScreen() {
   const [showAdminAuth, setShowAdminAuth] = useState(false);
   const [isSetup, setIsSetup] = useState(false);
   const [error, setError] = useState("");
+
+  // Load saved nickname on mount
+  useEffect(() => {
+    AsyncStorage.getItem(SAVED_NICKNAME_KEY).then((saved) => {
+      if (saved) setNicknameInput(saved);
+    }).catch(() => {});
+  }, []);
 
   // If already in room, go to chat
   useEffect(() => {
@@ -63,6 +73,8 @@ export default function WelcomeScreen() {
       return;
     }
     setError("");
+    // Save nickname for next time
+    AsyncStorage.setItem(SAVED_NICKNAME_KEY, nick).catch(() => {});
     joinRoom(nick, DEFAULT_ROOM_ID);
 
     // If it's Ammar, the server will respond with require_super_admin_auth

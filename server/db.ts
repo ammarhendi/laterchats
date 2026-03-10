@@ -157,3 +157,9 @@ export async function getRecentMessages(roomId: number, limit = 50): Promise<Mes
   if (!db) return [];
   return db.select().from(messages).where(eq(messages.roomId, roomId)).limit(limit);
 }
+
+export async function clearRoomMessages(roomId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(messages).where(eq(messages.roomId, roomId));
+}

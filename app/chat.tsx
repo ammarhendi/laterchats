@@ -174,6 +174,8 @@ export default function ChatScreen() {
   const { isVoiceEnabled, startVoice, stopVoice, error: voiceError } = useVoiceChat();
 
   const [inputText, setInputText] = useState("");
+  const [isBold, setIsBold] = useState(false);
+  const [isItalic, setIsItalic] = useState(false);
   const [showEmoji, setShowEmoji] = useState(false);
   const [selectedUser, setSelectedUser] = useState<ChatUser | null>(null);
   const [showUserModal, setShowUserModal] = useState(false);
@@ -204,18 +206,24 @@ export default function ChatScreen() {
   }, [messages.length]);
 
   const handleSend = useCallback(() => {
-    const text = inputText.trim();
+    let text = inputText.trim();
     if (!text) return;
     if (isTextMuted) {
       Alert.alert("Muted", "You have been muted and cannot send messages.");
       return;
     }
+    // Apply formatting without showing markers in input box
+    if (isBold && isItalic) text = `***${text}***`;
+    else if (isBold) text = `**${text}**`;
+    else if (isItalic) text = `_${text}_`;
     sendMessage(text);
     setInputText("");
+    setIsBold(false);
+    setIsItalic(false);
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-  }, [inputText, sendMessage, isTextMuted]);
+  }, [inputText, sendMessage, isTextMuted, isBold, isItalic]);
 
   const handleEmojiSelect = (emoji: string) => {
     setInputText((prev) => prev + emoji);
@@ -483,25 +491,17 @@ export default function ChatScreen() {
 
         {/* Toolbar */}
         <View style={styles.toolbar}>
-          <TouchableOpacity style={styles.toolbarBtn} onPress={() => {
-            const trimmed = inputText.trim();
-            if (trimmed) {
-              setInputText(`**${trimmed}**`);
-            } else {
-              setInputText("**bold text**");
-            }
-          }}>
-            <Text style={[styles.toolbarBtnText, { fontWeight: "bold" }]}>B</Text>
+          <TouchableOpacity
+            style={[styles.toolbarBtn, isBold && styles.toolbarBtnActive]}
+            onPress={() => setIsBold((v) => !v)}
+          >
+            <Text style={[styles.toolbarBtnText, { fontWeight: "bold" }, isBold && { color: "#FFD700" }]}>B</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.toolbarBtn} onPress={() => {
-            const trimmed = inputText.trim();
-            if (trimmed) {
-              setInputText(`_${trimmed}_`);
-            } else {
-              setInputText("_italic text_");
-            }
-          }}>
-            <Text style={[styles.toolbarBtnText, { fontStyle: "italic" }]}>I</Text>
+          <TouchableOpacity
+            style={[styles.toolbarBtn, isItalic && styles.toolbarBtnActive]}
+            onPress={() => setIsItalic((v) => !v)}
+          >
+            <Text style={[styles.toolbarBtnText, { fontStyle: "italic" }, isItalic && { color: "#FFD700" }]}>I</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.toolbarBtn} onPress={() => setShowEmoji(!showEmoji)}>
             <Text style={styles.toolbarBtnText}>😊</Text>
@@ -981,6 +981,10 @@ const styles = StyleSheet.create({
   toolbarBtnText: {
     color: "#fff",
     fontSize: 13,
+  },
+  toolbarBtnActive: {
+    backgroundColor: "#5A0070",
+    borderColor: "#FFD700",
   },
   toolbarSep: {
     color: "#555",
