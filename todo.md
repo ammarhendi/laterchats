@@ -86,3 +86,6 @@
 - [x] Remember nickname with AsyncStorage so user doesn't retype it every session
 - [x] Clear chat STILL not working - needs definitive fix
 - [x] Add one-tap Clear Chat button in chat header (Super Admin only, no settings needed)
+- [x] Clear chat definitively broken - rewrite with direct REST API
+- [x] Super Admin name should appear in gold color in chat and user list
+- [ ] Guide user step by step to publish on Apple App Store and Google Play Store

@@ -48,6 +48,12 @@ function getRoomUsers(roomId: number) {
     }));
 }
 
+let ioInstance: SocketIOServer | null = null;
+
+export function getIo(): SocketIOServer | null {
+  return ioInstance;
+}
+
 export function initSocketServer(httpServer: HttpServer) {
   const io = new SocketIOServer(httpServer, {
     cors: {
@@ -57,6 +63,9 @@ export function initSocketServer(httpServer: HttpServer) {
     },
     path: "/api/socket",
   });
+
+  // Store io instance for use by REST endpoints
+  ioInstance = io;
 
   io.on("connection", (socket) => {
     // Get client IP address

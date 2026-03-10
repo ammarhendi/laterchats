@@ -6,7 +6,8 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
-import { initSocketServer } from "../socket";
+import { initSocketServer, getIo } from "../socket";
+import * as db from "../db";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise((resolve) => {
@@ -59,6 +60,29 @@ async function startServer() {
 
   app.get("/api/health", (_req, res) => {
     res.json({ ok: true, timestamp: Date.now() });
+  });
+
+  // Simple direct clear-room endpoint - no tRPC, no socket, just DB + broadcast
+  app.post("/api/clear-room", async (req, res) => {
+    try {
+      const { token } = req.body;
+      const expectedToken = process.env.SUPER_ADMIN_CLEAR_TOKEN || "ammar_clear_2024";
+      if (token !== expectedToken) {
+        res.json({ success: false, error: "Unauthorized" });
+        return;
+      }
+      const room = await db.ensureDefaultRoom();
+      await db.clearRoomMessages(room.id);
+      // Broadcast to all connected socket clients in this room
+      const io = getIo();
+      if (io) {
+        io.to(`room_${room.id}`).emit("room_cleared");
+      }
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[api/clear-room] error:", err);
+      res.json({ success: false, error: (err as Error).message });
+    }
   });
 
   app.use(

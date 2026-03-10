@@ -327,20 +327,24 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
   const clearMessages = useCallback(() => setMessages([]), []);
 
-  const clearAllMessages = useCallback(() => {
-    const sock = socketRef.current;
-    if (!sock?.connected) {
-      Alert.alert("Not Connected", "Please wait for the connection to be established.");
-      return;
-    }
-    // Emit with acknowledgment callback so we know it was received
-    sock.emit("clear_room", (ack: { success: boolean; message?: string } | undefined) => {
-      if (ack && !ack.success) {
-        Alert.alert("Error", ack.message || "Failed to clear chat");
-      }
-    });
+  const clearAllMessages = useCallback(async () => {
     // Clear locally immediately for instant feedback
     setMessages([]);
+    try {
+      const apiBase = getApiBaseUrl();
+      const res = await fetch(`${apiBase}/api/clear-room`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: "ammar_clear_2024" }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        Alert.alert("Error", data.error || "Failed to clear chat on server");
+      }
+    } catch (e) {
+      // Already cleared locally, server sync failed silently
+      console.error("[clearAllMessages] fetch error:", e);
+    }
   }, []);
 
   // Admin actions

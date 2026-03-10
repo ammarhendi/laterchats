@@ -77,6 +77,14 @@ function RichText({ text, baseStyle }: { text: string; baseStyle?: object }) {
   );
 }
 
+const SUPER_ADMIN_NICKNAME = "Ammar";
+
+function getNicknameColor(nickname: string, isMe: boolean): string {
+  if (nickname.toLowerCase() === SUPER_ADMIN_NICKNAME.toLowerCase()) return "#FFD700";
+  if (isMe) return "#CC00CC";
+  return "#7B0099";
+}
+
 function MessageItem({ msg, myNickname }: { msg: ChatMessage; myNickname: string }) {
   if (msg.type === "system") {
     return (
@@ -88,11 +96,12 @@ function MessageItem({ msg, myNickname }: { msg: ChatMessage; myNickname: string
 
   if (msg.type === "private") {
     const isMe = msg.senderNickname === myNickname;
+    const senderColor = getNicknameColor(msg.senderNickname, isMe);
     return (
       <View style={styles.privateMsgRow}>
         <Text style={styles.privateMsgText}>
           <Text style={styles.privateLabel}>[PM] </Text>
-          <Text style={[styles.msgNickname, { color: "#FF6600" }]}>
+          <Text style={[styles.msgNickname, { color: senderColor }]}>
             {isMe ? `To ${msg.recipientNickname}` : msg.senderNickname}
           </Text>
           <Text style={styles.msgSays}> whispers: </Text>
@@ -103,10 +112,13 @@ function MessageItem({ msg, myNickname }: { msg: ChatMessage; myNickname: string
   }
 
   const isMe = msg.senderNickname === myNickname;
+  const nicknameColor = getNicknameColor(msg.senderNickname, isMe);
+  const isSuperAdmin = msg.senderNickname.toLowerCase() === SUPER_ADMIN_NICKNAME.toLowerCase();
   return (
     <View style={styles.msgRow}>
       <Text style={styles.msgText}>
-        <Text style={[styles.msgNickname, isMe && styles.myNickname]}>
+        {isSuperAdmin && <Text style={{ color: "#FFD700" }}>👑 </Text>}
+        <Text style={[styles.msgNickname, { color: nicknameColor }]}>
           {msg.senderNickname}
         </Text>
         <Text style={styles.msgSays}> says: </Text>
