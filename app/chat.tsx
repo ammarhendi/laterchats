@@ -236,11 +236,16 @@ export default function ChatScreen() {
   const isMod = myRole === "moderator" || myRole === "super_admin" || (nickname ? isSuperAdminName(nickname) : false);
 
   // Redirect to home if no nickname
+  // Guard: only navigate after the component has mounted to avoid
+  // "attempted to navigate before mounting the root layout" error
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => { setIsMounted(true); }, []);
   useEffect(() => {
+    if (!isMounted) return;
     if (!nickname) {
       router.replace("/" as any);
     }
-  }, [nickname]);
+  }, [nickname, isMounted]);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {

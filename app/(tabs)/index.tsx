@@ -137,11 +137,15 @@ export default function WelcomeScreen() {
   }, []);
 
   // If already in room, go to chat
+  // Guard: only navigate after mount to avoid "attempted to navigate before mounting the root layout"
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => { setIsMounted(true); }, []);
   useEffect(() => {
+    if (!isMounted) return;
     if (currentNickname && roomId) {
       router.replace("/chat" as any);
     }
-  }, [currentNickname, roomId]);
+  }, [currentNickname, roomId, isMounted]);
 
   // When server asks for super admin auth
   useEffect(() => {
