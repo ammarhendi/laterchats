@@ -5,8 +5,12 @@ import { getDb } from "./db";
 import { superAdminConfig, bannedUsers, chatRoles } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
 
-// The reserved super admin nickname — nobody else can use this
-export const SUPER_ADMIN_NICKNAME = "Ammar";
+// The reserved super admin nicknames — nobody else can use these
+export const SUPER_ADMIN_NICKNAME = "Ammar"; // Primary display name used in chat
+export const SUPER_ADMIN_NICKNAMES = ["Ammar", "Later"]; // All valid super admin login names
+export function isSuperAdminNickname(nickname: string): boolean {
+  return SUPER_ADMIN_NICKNAMES.some((n) => n.toLowerCase() === nickname.toLowerCase());
+}
 // The hidden recovery email
 const RECOVERY_EMAIL = "ammar.hendi@hotmail.com";
 
@@ -196,7 +200,7 @@ export async function demoteUser(nickname: string): Promise<void> {
 }
 
 export async function getUserRole(nickname: string): Promise<"super_admin" | "moderator" | "user"> {
-  if (nickname === SUPER_ADMIN_NICKNAME) return "super_admin";
+  if (isSuperAdminNickname(nickname)) return "super_admin";
   const db = await getDb();
   if (!db) return "user";
   const rows = await db.select().from(chatRoles).where(eq(chatRoles.nickname, nickname)).limit(1);

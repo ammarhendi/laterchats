@@ -17,7 +17,34 @@ import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useChat, ChatMessage, ChatUser, UserRole } from "@/lib/chat-context";
 import { useVoiceChat } from "@/lib/use-voice-chat";
+import { trpc } from "@/lib/trpc";
 import * as Haptics from "expo-haptics";
+
+const ROOM_ICONS: Record<string, string> = {
+  "Now": "⚡",
+  "Arab World": "🌍",
+  "Issues": "🔥",
+  "Social Media": "📱",
+  "Chilling Out": "😎",
+  "Dancing": "💃",
+  "Blah Blah": "💬",
+  "Nothing Hidden": "🔓",
+  "For All": "🌐",
+  "Random": "🎲",
+};
+
+const FALLBACK_ROOMS = [
+  { id: 1, name: "Now" },
+  { id: 2, name: "Arab World" },
+  { id: 3, name: "Issues" },
+  { id: 4, name: "Social Media" },
+  { id: 5, name: "Chilling Out" },
+  { id: 6, name: "Dancing" },
+  { id: 7, name: "Blah Blah" },
+  { id: 8, name: "Nothing Hidden" },
+  { id: 9, name: "For All" },
+  { id: 10, name: "Random" },
+];
 
 const EMOJIS = ["😊", "😂", "😍", "😎", "🤔", "😢", "😡", "👍", "👎", "❤️", "🔥", "💯", "🎉", "👋", "🤣"];
 
@@ -196,7 +223,12 @@ export default function ChatScreen() {
   const [banReason, setBanReason] = useState("");
   const [showBanInput, setShowBanInput] = useState(false);
   const [banVoiceOnly, setBanVoiceOnly] = useState(false);
+  const [showRoomSwitcher, setShowRoomSwitcher] = useState(false);
   const flatListRef = useRef<FlatList>(null);
+
+  const { joinRoom, roomId } = useChat();
+  const { data: roomsData } = trpc.chat.getAllRooms.useQuery(undefined, { retry: 1 });
+  const availableRooms = roomsData && roomsData.length > 0 ? roomsData : FALLBACK_ROOMS;
 
   const isAdmin = myRole === "super_admin";
   const isMod = myRole === "moderator" || myRole === "super_admin";
@@ -467,6 +499,9 @@ export default function ChatScreen() {
                 </TouchableOpacity>
               </>
             )}
+            <TouchableOpacity onPress={() => setShowRoomSwitcher(true)} style={styles.roomSwitchBtn}>
+              <Text style={styles.roomSwitchBtnText}>🔀</Text>
+            </TouchableOpacity>
             <TouchableOpacity onPress={handleLeave} style={styles.exitBtn}>
               <Text style={styles.exitBtnText}>EXIT</Text>
             </TouchableOpacity>
@@ -784,6 +819,51 @@ export default function ChatScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Room Switcher Modal */}
+      <Modal
+        visible={showRoomSwitcher}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowRoomSwitcher(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalBox, { width: 320, maxHeight: "75%" }]}>
+            <Text style={[styles.modalTitle, { backgroundColor: "#7B0099" }]}>
+              🔀 Switch Room
+            </Text>
+            <ScrollView style={{ maxHeight: 380 }}>
+              {availableRooms.map((room) => (
+                <TouchableOpacity
+                  key={room.id}
+                  style={[
+                    styles.roomSwitchItem,
+                    roomId === room.id && styles.roomSwitchItemActive,
+                  ]}
+                  onPress={() => {
+                    if (roomId !== room.id) {
+                      joinRoom(nickname!, room.id);
+                    }
+                    setShowRoomSwitcher(false);
+                  }}
+                >
+                  <Text style={styles.roomSwitchIcon}>{ROOM_ICONS[room.name] ?? "💬"}</Text>
+                  <Text style={[
+                    styles.roomSwitchName,
+                    roomId === room.id && styles.roomSwitchNameActive,
+                  ]}>{room.name}</Text>
+                  {roomId === room.id && (
+                    <Text style={styles.roomSwitchCurrent}>✓ Current</Text>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TouchableOpacity style={styles.modalCancel} onPress={() => setShowRoomSwitcher(false)}>
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </ScreenContainer>
   );
 }
@@ -1026,6 +1106,49 @@ const styles = StyleSheet.create({
   },
   clearBtnText: {
     fontSize: 18,
+  },
+  roomSwitchBtn: {
+    backgroundColor: "#5A0070",
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 3,
+    borderWidth: 1,
+    borderColor: "#FFD700",
+    marginRight: 2,
+  },
+  roomSwitchBtnText: {
+    fontSize: 14,
+  },
+  roomSwitchItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#222",
+    gap: 10,
+  },
+  roomSwitchItemActive: {
+    backgroundColor: "#1a0022",
+  },
+  roomSwitchIcon: {
+    fontSize: 22,
+    width: 30,
+    textAlign: "center",
+  },
+  roomSwitchName: {
+    flex: 1,
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  roomSwitchNameActive: {
+    color: "#FFD700",
+  },
+  roomSwitchCurrent: {
+    color: "#00CC00",
+    fontSize: 12,
+    fontWeight: "bold",
   },
   toolbarSep: {
     color: "#555",

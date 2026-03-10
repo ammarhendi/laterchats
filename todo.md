@@ -118,3 +118,7 @@
 - [x] Block screenshots and screen recording in the app (FLAG_SECURE on Android, blur overlay on iOS)
 - [x] Enable app switcher blur protection on iOS (blurs screen when app loses focus, preventing recording from another phone)
 - [x] Apply screen protection globally across ALL screens in the app (in root _layout.tsx)
+- [x] Fix super admin login not working after rooms/security update
+- [x] Change all "conversations are monitored" text to "conversations are fully secured and private"
+- [x] Add "Later" as a second super admin username (both "Ammar" and "Later" are super admin names)
+- [x] Add room switcher button in chat header so users can change rooms without going back to welcome screen

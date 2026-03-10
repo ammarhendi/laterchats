@@ -24,7 +24,8 @@ import * as ScreenCapture from "expo-screen-capture";
 
 const SAVED_NICKNAME_KEY = "@later_saved_nickname";
 const SAVED_REGISTERED_USER_KEY = "@later_registered_user";
-const SUPER_ADMIN_NICKNAME = "Ammar";
+const SUPER_ADMIN_NICKNAMES = ["Ammar", "Later"];
+const SUPER_ADMIN_NICKNAME = SUPER_ADMIN_NICKNAMES[0];
 
 type Tab = "guest" | "login" | "register";
 type Screen = "auth" | "rooms";
@@ -239,8 +240,14 @@ export default function WelcomeScreen() {
   };
 
   const handleRoomSelect = (selectedRoomId: number) => {
-    joinRoom(pendingNickname, selectedRoomId);
-    setTimeout(() => { router.replace("/chat" as any); }, 400);
+    if (SUPER_ADMIN_NICKNAMES.some(n => n.toLowerCase() === pendingNickname.toLowerCase())) {
+      // Super admin: trigger auth flow with the selected room
+      joinRoom(SUPER_ADMIN_NICKNAME, selectedRoomId);
+      // Modal will show via useEffect when requireSuperAdminAuth becomes true
+    } else {
+      joinRoom(pendingNickname, selectedRoomId);
+      // Navigation happens automatically via useEffect when room_joined fires and sets roomId
+    }
   };
 
   const handleAdminAuth = () => {
@@ -254,12 +261,14 @@ export default function WelcomeScreen() {
     setShowAdminAuth(false);
     setAdminPassword("");
     setAdminConfirmPassword("");
-    setTimeout(() => { router.replace("/chat" as any); }, 600);
+    // Navigation happens automatically via useEffect when room_joined fires and sets roomId
   };
 
   const handleSuperAdminJoin = () => {
     setError("");
-    joinRoom(SUPER_ADMIN_NICKNAME, 1);
+    // Show room selection first, then auth will trigger after room is selected
+    setPendingNickname(SUPER_ADMIN_NICKNAME);
+    setScreen("rooms");
   };
 
   const handleShare = async () => {
@@ -337,7 +346,7 @@ export default function WelcomeScreen() {
           <View style={styles.card}>
             <View style={styles.cardHeader}>
               <Text style={styles.cardHeaderText}>Join Later</Text>
-              <Text style={styles.cardSubText}>18+ only · All conversations are monitored</Text>
+              <Text style={styles.cardSubText}>18+ only · All conversations are fully secured &amp; private</Text>
             </View>
 
             {/* Tabs */}

@@ -6,7 +6,7 @@ import crypto from "crypto";
 import bcrypt from "bcryptjs";
 
 // Reserved usernames — cannot be registered by anyone
-const RESERVED_USERNAMES = ["ammar", "Ammar", "AMMAR", "admin", "system", "moderator"];
+const RESERVED_USERNAMES = ["ammar", "Ammar", "AMMAR", "later", "Later", "LATER", "admin", "system", "moderator"];
 
 // Security constants
 const MAX_LOGIN_ATTEMPTS = 5;

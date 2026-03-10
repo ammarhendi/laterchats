@@ -92,7 +92,6 @@ const config: ExpoConfig = {
   },
   plugins: [
     "expo-router",
-    "expo-screen-capture",
     [
       "expo-audio",
       {

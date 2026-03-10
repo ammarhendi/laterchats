@@ -5,6 +5,7 @@ import { messages, inviteTokens } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
 import {
   SUPER_ADMIN_NICKNAME,
+  isSuperAdminNickname,
   isSuperAdminPasswordSet,
   setSuperAdminPassword,
   verifySuperAdminPassword,
@@ -79,9 +80,9 @@ export function initSocketServer(httpServer: HttpServer) {
     // ── Join room ─────────────────────────────────────────────────────────────
     socket.on("join_room", async ({ nickname, roomId, token }: { nickname: string; roomId: number; token?: string }) => {
       try {
-        // Block reserved super admin nickname from being used by others
-        if (nickname.toLowerCase() === SUPER_ADMIN_NICKNAME.toLowerCase()) {
-          // The actual Ammar will authenticate separately via "super_admin_auth"
+        // Block reserved super admin nicknames from being used by others
+        if (isSuperAdminNickname(nickname)) {
+          // The actual super admin will authenticate separately via "super_admin_auth"
           // Here we just block the join until auth is confirmed
           socket.emit("require_super_admin_auth", {
             isPasswordSet: await isSuperAdminPasswordSet(),
