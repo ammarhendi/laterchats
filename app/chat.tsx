@@ -430,9 +430,30 @@ export default function ChatScreen() {
             <Text style={styles.headerRoom}>{roomName}</Text>
             <Text style={styles.headerCount}>[{users.length}]</Text>
             {isAdmin && (
-              <TouchableOpacity onPress={() => setShowAdminPanel(true)} style={styles.adminBtn}>
-                <Text style={styles.adminBtnText}>👑</Text>
-              </TouchableOpacity>
+              <>
+                <TouchableOpacity
+                  onPress={() => {
+                    Alert.alert(
+                      "Clear Chat",
+                      "Clear ALL messages for everyone in the room?",
+                      [
+                        { text: "Cancel", style: "cancel" },
+                        {
+                          text: "Clear", style: "destructive", onPress: () => {
+                            clearAllMessages();
+                          }
+                        },
+                      ]
+                    );
+                  }}
+                  style={styles.clearBtn}
+                >
+                  <Text style={styles.clearBtnText}>🗑️</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setShowAdminPanel(true)} style={styles.adminBtn}>
+                  <Text style={styles.adminBtnText}>👑</Text>
+                </TouchableOpacity>
+              </>
             )}
             <TouchableOpacity onPress={handleLeave} style={styles.exitBtn}>
               <Text style={styles.exitBtnText}>EXIT</Text>
@@ -985,6 +1006,14 @@ const styles = StyleSheet.create({
   toolbarBtnActive: {
     backgroundColor: "#5A0070",
     borderColor: "#FFD700",
+  },
+  clearBtn: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginRight: 2,
+  },
+  clearBtnText: {
+    fontSize: 18,
   },
   toolbarSep: {
     color: "#555",

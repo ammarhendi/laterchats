@@ -84,3 +84,5 @@
 - [x] Bold button shows stars in text box instead of toggling bold state
 - [x] Clear chat still not working for all users
 - [x] Remember nickname with AsyncStorage so user doesn't retype it every session
+- [x] Clear chat STILL not working - needs definitive fix
+- [x] Add one-tap Clear Chat button in chat header (Super Admin only, no settings needed)
