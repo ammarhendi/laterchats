@@ -389,12 +389,27 @@ export function initSocketServer(httpServer: HttpServer) {
 
         socket.emit("private_message", msg);
 
-        // Find recipient across ALL rooms (PMs are cross-room)
+        // Find recipient across ALL rooms (PMs are cross-room) — case-insensitive
         const recipientSocket = Array.from(activeUsers.values()).find(
-          (u) => u.nickname === recipientNickname
+          (u) => u.nickname.toLowerCase() === recipientNickname.toLowerCase()
         );
         if (recipientSocket) {
+          // Deliver the PM to the recipient
           io.to(recipientSocket.socketId).emit("private_message", msg);
+          // Also relay sender's public key to recipient (for cross-room E2EE)
+          if (user.publicKeyJwk) {
+            io.to(recipientSocket.socketId).emit("public_key_broadcast", {
+              nickname: user.nickname,
+              publicKeyJwk: user.publicKeyJwk,
+            });
+          }
+          // And relay recipient's public key back to sender (for E2EE reply)
+          if (recipientSocket.publicKeyJwk) {
+            socket.emit("public_key_broadcast", {
+              nickname: recipientSocket.nickname,
+              publicKeyJwk: recipientSocket.publicKeyJwk,
+            });
+          }
         } else {
           // Recipient is offline — store PM for delivery on next login
           if (db) {

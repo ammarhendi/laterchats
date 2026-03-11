@@ -19,7 +19,31 @@ import * as ScreenCapture from "expo-screen-capture";
 
 import { trpc, createTRPCClient } from "@/lib/trpc";
 import { initManusRuntime, subscribeSafeAreaInsets } from "@/lib/_core/manus-runtime";
-import { ChatProvider } from "@/lib/chat-context";
+import { ChatProvider, useChat } from "@/lib/chat-context";
+import { useRouter } from "expo-router";
+import { useRef } from "react";
+
+// Global component that auto-opens the PM screen when a new PM arrives from anywhere in the app
+function PMAutoNavigator() {
+  const { incomingPM, dismissIncomingPM, markPMRead } = useChat();
+  const router = useRouter();
+  const lastOpenedRef = useRef<string | null>(null);
+  const lastOpenedTimeRef = useRef<number>(0);
+
+  useEffect(() => {
+    if (!incomingPM) return;
+    const now = Date.now();
+    // Debounce: don't re-open same sender within 3 seconds
+    if (lastOpenedRef.current === incomingPM.from && now - lastOpenedTimeRef.current < 3000) return;
+    lastOpenedRef.current = incomingPM.from;
+    lastOpenedTimeRef.current = now;
+    markPMRead(incomingPM.from);
+    dismissIncomingPM();
+    router.push(`/pm/${incomingPM.from}` as any);
+  }, [incomingPM?.from]);
+
+  return null;
+}
 
 const DEFAULT_WEB_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 const DEFAULT_WEB_FRAME: Rect = { x: 0, y: 0, width: 0, height: 0 };
@@ -125,6 +149,7 @@ export default function RootLayout() {
       <trpc.Provider client={trpcClient} queryClient={queryClient}>
         <QueryClientProvider client={queryClient}>
           <ChatProvider>
+          <PMAutoNavigator />
           {/* Default to hiding native headers so raw route segments don't appear (e.g. "(tabs)", "products/[id]"). */}
           {/* If a screen needs the native header, explicitly enable it and set a human title via Stack.Screen options. */}
           {/* in order for ios apps tab switching to work properly, use presentation: "fullScreenModal" for login page, whenever you decide to use presentation: "modal*/}

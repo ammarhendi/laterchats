@@ -299,6 +299,19 @@ export default function ChatScreen() {
     setClearAtCount(null);
   }, [roomId]);
 
+  // Auto-open PM window when a new private message arrives (like Messenger)
+  const lastIncomingPMRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!incomingPM) return;
+    // Only auto-open if this is a NEW sender (not the same one already open)
+    if (lastIncomingPMRef.current === incomingPM.from) return;
+    lastIncomingPMRef.current = incomingPM.from;
+    // Auto-navigate to PM screen immediately
+    markPMRead(incomingPM.from);
+    dismissIncomingPM();
+    router.push(`/pm/${incomingPM.from}` as any);
+  }, [incomingPM?.from]);
+
   // Auto-scroll to bottom on new messages
   useEffect(() => {
     if (messages.length > 0) {

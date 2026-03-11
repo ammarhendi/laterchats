@@ -194,3 +194,5 @@
 - [x] Rebuild PM as proper full-screen messenger-style conversation window (separate screen per contact, like a messenger app)
 - [x] Fix white screen bug when clicking into a chat room (web test link)
 - [x] Fix "Clear My View" button not working for regular users (non-admin)
+- [x] Fix PM delivery: private messages not being received by the other user
+- [x] Auto-open PM conversation window when a new PM arrives (like Messenger popup)
