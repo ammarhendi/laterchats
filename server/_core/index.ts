@@ -232,6 +232,21 @@ async function startServer() {
     }
   });
 
+  // ── Serve built Expo web app (production only) ──────────────────────────────
+  if (process.env.NODE_ENV === "production") {
+    const path = await import("path");
+    const { fileURLToPath } = await import("url");
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    const webDistPath = path.join(__dirname, "web");
+    app.use(express.static(webDistPath));
+    // Serve index.html for all non-API routes (SPA fallback)
+    app.get("*", (req, res, next) => {
+      if (req.path.startsWith("/api/")) return next();
+      res.sendFile(path.join(webDistPath, "index.html"));
+    });
+  }
+
   app.use(
     "/api/trpc",
     createExpressMiddleware({

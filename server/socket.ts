@@ -87,13 +87,54 @@ export function getSocketIdByNickname(nickname: string): string | undefined {
 }
 
 export function initSocketServer(httpServer: HttpServer) {
+  // In production, lock CORS to the actual domain; in dev allow all origins
+  const allowedOrigins = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim())
+    : null; // null = allow all (dev mode)
+
   const io = new SocketIOServer(httpServer, {
     cors: {
-      origin: "*",
+      origin: allowedOrigins
+        ? (origin, callback) => {
+            if (!origin || allowedOrigins.includes(origin)) {
+              callback(null, true);
+            } else {
+              callback(new Error("Not allowed by CORS"));
+            }
+          }
+        : "*",
       methods: ["GET", "POST"],
       credentials: true,
     },
     path: "/api/socket",
+    // Connection limits to prevent DoS
+    connectTimeout: 10000, // 10 seconds to complete handshake
+    pingTimeout: 20000,
+    pingInterval: 25000,
+  });
+
+  // IP-based connection rate limiting: max 10 connections per IP per minute
+  const ipConnectionCounts = new Map<string, { count: number; resetAt: number }>();
+  const MAX_CONNECTIONS_PER_IP = 10;
+  const CONNECTION_WINDOW_MS = 60 * 1000; // 1 minute
+
+  io.use((socket, next) => {
+    const ip =
+      (socket.handshake.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
+      socket.handshake.address ||
+      "unknown";
+    const now = Date.now();
+    const entry = ipConnectionCounts.get(ip);
+    if (!entry || now > entry.resetAt) {
+      ipConnectionCounts.set(ip, { count: 1, resetAt: now + CONNECTION_WINDOW_MS });
+      return next();
+    }
+    entry.count++;
+    if (entry.count > MAX_CONNECTIONS_PER_IP) {
+      console.warn(`[Socket] Connection rate limit exceeded for IP: ${ip}`);
+      return next(new Error("Too many connections from this IP. Please wait."));
+    }
+    next();
   });
 
   // Store io instance for use by REST endpoints
@@ -177,6 +218,28 @@ export function initSocketServer(httpServer: HttpServer) {
     // ── Join room ─────────────────────────────────────────────────────────────
     socket.on("join_room", async ({ nickname, roomId, token }: { nickname: string; roomId: number; token?: string }) => {
       try {
+        // Input validation and sanitization
+        if (!nickname || typeof nickname !== "string") {
+          socket.emit("error", { message: "Invalid nickname." });
+          return;
+        }
+        // Sanitize: trim whitespace, strip HTML/script tags, limit length
+        const sanitizedNickname = nickname.trim().replace(/<[^>]*>/g, "").slice(0, 30);
+        if (!sanitizedNickname || sanitizedNickname.length < 2) {
+          socket.emit("error", { message: "Nickname must be at least 2 characters." });
+          return;
+        }
+        // Only allow alphanumeric, underscores, hyphens, and spaces
+        if (!/^[a-zA-Z0-9_\-\s؀-ۿݐ-ݿ]+$/.test(sanitizedNickname)) {
+          socket.emit("error", { message: "Nickname contains invalid characters." });
+          return;
+        }
+        nickname = sanitizedNickname;
+        if (typeof roomId !== "number" || roomId < 1) {
+          socket.emit("error", { message: "Invalid room." });
+          return;
+        }
+
         // Check if user is fully banned (not just voice-banned)
         const banStatus = await isUserBanned(nickname, ipAddress);
         if (banStatus.banned && !banStatus.voiceBanOnly) {
