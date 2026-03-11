@@ -490,20 +490,27 @@ export default function ChatScreen() {
   };
 
   const handleLocalClearChat = () => {
-    Alert.alert(
-      "Clear My View",
-      "Clear all messages from your screen? This only clears your view — other users are not affected.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Clear",
-          style: "destructive",
-          onPress: () => {
-            setClearAtCount(messages.length);
+    // Alert.alert does not work on web — use cross-platform confirm
+    if (Platform.OS === "web") {
+      // On web, just clear directly (no native dialog available)
+      setClearAtCount(messages.length);
+    } else {
+      Alert.alert(
+        "Clear My View",
+        "Clear all messages from your screen? This only clears your view — other users are not affected.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Clear",
+            style: "destructive",
+            onPress: () => {
+              setClearAtCount(messages.length);
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            },
           },
-        },
-      ]
-    );
+        ]
+      );
+    }
   };
 
   const handleClearChat = () => {
