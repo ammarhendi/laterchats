@@ -239,6 +239,16 @@ export default function ChatScreen() {
   const [showBanInput, setShowBanInput] = useState(false);
   const [banVoiceOnly, setBanVoiceOnly] = useState(false);
   const [showRoomSwitcher, setShowRoomSwitcher] = useState(false);
+  const [showChatTools, setShowChatTools] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showFavoriteRooms, setShowFavoriteRooms] = useState(false);
+  const [showIgnoreList, setShowIgnoreList] = useState(false);
+  const [ignoredUsers, setIgnoredUsers] = useState<string[]>([]);
+  const [fontSize, setFontSize] = useState(13);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [showTimestamps, setShowTimestamps] = useState(true);
+  const [userStatus, setUserStatus] = useState("I'm Available");
+  const [showStatusPicker, setShowStatusPicker] = useState(false);
   const flatListRef = useRef<FlatList>(null);
 
   const { switchRoom, roomId } = useChat();
@@ -508,24 +518,21 @@ export default function ChatScreen() {
         <View style={styles.ymNavBar}>
           <TouchableOpacity
             style={styles.ymNavBtn}
-            onPress={() => {
-              if (isAdmin) setShowAdminPanel(true);
-              else Alert.alert("Chat Tools", "Available tools:\n• Change font style\n• Set preferences\n• View chat rules");
-            }}
+            onPress={() => setShowChatTools(true)}
           >
             <Text style={styles.ymNavBtnText}>Chat Tools ▾</Text>
           </TouchableOpacity>
           <View style={styles.ymNavSep} />
           <TouchableOpacity
             style={styles.ymNavBtn}
-            onPress={() => Alert.alert("Settings", "Chat settings:\n• Font size\n• Sound alerts\n• Ignore list")}
+            onPress={() => setShowSettings(true)}
           >
             <Text style={styles.ymNavBtnText}>Settings ▾</Text>
           </TouchableOpacity>
           <View style={styles.ymNavSep} />
           <TouchableOpacity
             style={styles.ymNavBtn}
-            onPress={() => router.push("/(tabs)/" as any)}
+            onPress={() => setShowFavoriteRooms(true)}
           >
             <Text style={styles.ymNavBtnText}>Favorite Rooms ▾</Text>
           </TouchableOpacity>
@@ -645,12 +652,12 @@ export default function ChatScreen() {
             <Text style={styles.ymSizeSelectText}>10 ▾</Text>
           </View>
           <View style={styles.toolbarDivider} />
-          {/* Report Abuse */}
+          {/* Color picker (decorative, like YM) */}
           <TouchableOpacity
-            style={styles.ymReportBtn}
-            onPress={() => Alert.alert("Report Abuse", "To report a user, tap their name in the Chatters panel and select the appropriate action.")}
+            style={styles.ymToolBtn}
+            onPress={() => Alert.alert("Text Color", "Text color selection coming soon!")}
           >
-            <Text style={styles.ymReportBtnText}>Report Abuse</Text>
+            <Text style={[styles.ymToolBtnText, { color: "#CC0000" }]}>A</Text>
           </TouchableOpacity>
           <View style={{ flex: 1 }} />
           {/* Mod panel */}
@@ -761,10 +768,12 @@ export default function ChatScreen() {
           <Text style={styles.statusBarLabel}>Status:</Text>
           <TouchableOpacity
             style={styles.statusDropdown}
-            onPress={() => Alert.alert("Status", "Change your status:\n• I'm Available\n• Busy\n• Be Right Back\n• Away\n• Invisible")}
+            onPress={() => setShowStatusPicker(true)}
           >
-            <Text style={styles.statusDropdownText}>I'm Available ▾</Text>
+            <Text style={styles.statusDropdownText}>{userStatus} ▾</Text>
           </TouchableOpacity>
+          <View style={{ flex: 1 }} />
+          <Text style={styles.copyrightBarText}>© {new Date().getFullYear()} Later. All rights reserved.</Text>
         </View>
       </KeyboardAvoidingView>
 
@@ -1031,10 +1040,182 @@ export default function ChatScreen() {
           </TouchableOpacity>
         </View>
       )}
-      {/* Copyright footer */}
-      <View style={styles.copyrightBar}>
-        <Text style={styles.copyrightBarText}>© {new Date().getFullYear()} Later. All rights reserved.</Text>
-      </View>
+      {/* ── Chat Tools Modal ─────────────────────────────────────────── */}
+      <Modal visible={showChatTools} transparent animationType="fade" onRequestClose={() => setShowChatTools(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setShowChatTools(false)}>
+          <View style={[styles.modalBox, { width: 280 }]}>
+            <Text style={[styles.modalTitle, { backgroundColor: "#5A0070" }]}>Chat Tools</Text>
+            <View style={styles.modalDivider} />
+            <TouchableOpacity style={styles.modalOption} onPress={() => { setShowChatTools(false); router.push("/(tabs)/profile" as any); }}>
+              <Text style={styles.modalOptionText}>👤 My Profile</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.modalOption} onPress={() => { setShowChatTools(false); router.push("/(tabs)/friends" as any); }}>
+              <Text style={styles.modalOptionText}>👥 My Friends List</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.modalOption} onPress={() => { setShowChatTools(false); setShowEmoji(true); }}>
+              <Text style={styles.modalOptionText}>😊 Emoticons</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.modalOption} onPress={() => { setShowChatTools(false); setShowIgnoreList(true); }}>
+              <Text style={styles.modalOptionText}>🚫 Ignore List</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.modalOption} onPress={() => {
+              setShowChatTools(false);
+              Alert.alert("Chat Rules", "Later! Chat Rules:\n\n1. Be respectful to all users.\n2. No harassment or bullying.\n3. No spam or advertising.\n4. No sharing of personal information.\n5. Keep conversations appropriate.\n6. Moderators may remove users who violate these rules.");
+            }}>
+              <Text style={styles.modalOptionText}>📋 Chat Rules</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.modalOption} onPress={() => {
+              setShowChatTools(false);
+              Alert.alert("Help", "Later! Chat Help\n\n• Tap a username in Chatters to PM, call, or ignore.\n• Use Voice: Talk to speak in the room.\n• Use Change Room to switch rooms.\n• Use Favorite Rooms for quick access.\n• Use Settings to adjust font size and sounds.");
+            }}>
+              <Text style={styles.modalOptionText}>❓ Help</Text>
+            </TouchableOpacity>
+            {isAdmin && (
+              <>
+                <View style={styles.modalSectionLabel}>
+                  <Text style={styles.modalSectionLabelText}>— Admin Tools —</Text>
+                </View>
+                <TouchableOpacity style={styles.modalOption} onPress={() => { setShowChatTools(false); setShowAdminPanel(true); }}>
+                  <Text style={[styles.modalOptionText, { color: "#7B1FA2" }]}>👑 Admin Panel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.modalOption} onPress={() => { setShowChatTools(false); router.push("/admin" as any); }}>
+                  <Text style={[styles.modalOptionText, { color: "#7B1FA2" }]}>🔗 Generate Invite Link</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.modalOption} onPress={() => { setShowChatTools(false); handleClearChat(); }}>
+                  <Text style={[styles.modalOptionText, { color: "#CC0000" }]}>🗑️ Clear Chat</Text>
+                </TouchableOpacity>
+              </>
+            )}
+            <TouchableOpacity style={styles.modalCancel} onPress={() => setShowChatTools(false)}>
+              <Text style={styles.modalCancelText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* ── Settings Modal ────────────────────────────────────────────────── */}
+      <Modal visible={showSettings} transparent animationType="fade" onRequestClose={() => setShowSettings(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setShowSettings(false)}>
+          <View style={[styles.modalBox, { width: 300 }]}>
+            <Text style={[styles.modalTitle, { backgroundColor: "#5A0070" }]}>Settings</Text>
+            <View style={styles.modalDivider} />
+            <View style={styles.settingsRow}>
+              <Text style={styles.settingsLabel}>Font Size</Text>
+              <View style={styles.settingsStepper}>
+                <TouchableOpacity style={styles.stepperBtn} onPress={() => setFontSize(f => Math.max(10, f - 1))}>
+                  <Text style={styles.stepperBtnText}>−</Text>
+                </TouchableOpacity>
+                <Text style={styles.stepperValue}>{fontSize}px</Text>
+                <TouchableOpacity style={styles.stepperBtn} onPress={() => setFontSize(f => Math.min(20, f + 1))}>
+                  <Text style={styles.stepperBtnText}>+</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            <View style={styles.settingsDivider} />
+            <TouchableOpacity style={styles.settingsRow} onPress={() => setSoundEnabled(s => !s)}>
+              <Text style={styles.settingsLabel}>Sound Alerts</Text>
+              <Text style={styles.settingsToggle}>{soundEnabled ? "✅ On" : "⬜ Off"}</Text>
+            </TouchableOpacity>
+            <View style={styles.settingsDivider} />
+            <TouchableOpacity style={styles.settingsRow} onPress={() => setShowTimestamps(s => !s)}>
+              <Text style={styles.settingsLabel}>Show Timestamps</Text>
+              <Text style={styles.settingsToggle}>{showTimestamps ? "✅ On" : "⬜ Off"}</Text>
+            </TouchableOpacity>
+            <View style={styles.settingsDivider} />
+            <View style={styles.settingsRow}>
+              <Text style={styles.settingsLabel}>My Status</Text>
+              <TouchableOpacity onPress={() => { setShowSettings(false); setShowStatusPicker(true); }}>
+                <Text style={styles.settingsValue}>{userStatus} ▾</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.settingsDivider} />
+            <View style={styles.settingsRow}>
+              <Text style={styles.settingsLabel}>Notification Sound</Text>
+              <Text style={styles.settingsValue}>Default</Text>
+            </View>
+            <TouchableOpacity style={styles.modalCancel} onPress={() => setShowSettings(false)}>
+              <Text style={styles.modalCancelText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* ── Favorite Rooms Modal ──────────────────────────────────────────── */}
+      <Modal visible={showFavoriteRooms} transparent animationType="fade" onRequestClose={() => setShowFavoriteRooms(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setShowFavoriteRooms(false)}>
+          <View style={[styles.modalBox, { width: 300, maxHeight: "75%" }]}>
+            <Text style={[styles.modalTitle, { backgroundColor: "#5A0070" }]}>⭐ Favorite Rooms</Text>
+            <ScrollView style={{ maxHeight: 380 }}>
+              {availableRooms.map((room) => (
+                <TouchableOpacity
+                  key={room.id}
+                  style={[styles.roomSwitchItem, roomId === room.id && styles.roomSwitchItemActive]}
+                  onPress={() => {
+                    if (roomId !== room.id) switchRoom(room.id);
+                    setShowFavoriteRooms(false);
+                  }}
+                >
+                  <Text style={styles.roomSwitchIcon}>{ROOM_ICONS[room.name] ?? "💬"}</Text>
+                  <Text style={[styles.roomSwitchName, roomId === room.id && styles.roomSwitchNameActive]}>{room.name}</Text>
+                  {roomId === room.id && <Text style={styles.roomSwitchCurrent}>✓ Current</Text>}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TouchableOpacity style={styles.modalCancel} onPress={() => setShowFavoriteRooms(false)}>
+              <Text style={styles.modalCancelText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* ── Status Picker Modal ───────────────────────────────────────────── */}
+      <Modal visible={showStatusPicker} transparent animationType="fade" onRequestClose={() => setShowStatusPicker(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setShowStatusPicker(false)}>
+          <View style={[styles.modalBox, { width: 260 }]}>
+            <Text style={[styles.modalTitle, { backgroundColor: "#5A0070" }]}>Change Status</Text>
+            <View style={styles.modalDivider} />
+            {["I'm Available", "Busy", "Be Right Back", "Away", "On the Phone", "Out to Lunch", "Invisible"].map((s) => (
+              <TouchableOpacity key={s} style={styles.modalOption} onPress={() => { setUserStatus(s); setShowStatusPicker(false); }}>
+                <Text style={[styles.modalOptionText, userStatus === s && { fontWeight: "bold", color: "#7B1FA2" }]}>
+                  {userStatus === s ? "✓ " : "   "}{s}
+                </Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity style={styles.modalCancel} onPress={() => setShowStatusPicker(false)}>
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* ── Ignore List Modal ─────────────────────────────────────────────── */}
+      <Modal visible={showIgnoreList} transparent animationType="fade" onRequestClose={() => setShowIgnoreList(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalBox, { width: 300, maxHeight: "70%" }]}>
+            <Text style={[styles.modalTitle, { backgroundColor: "#5A0070" }]}>🚫 Ignore List</Text>
+            <ScrollView style={{ maxHeight: 280 }}>
+              {ignoredUsers.length === 0 ? (
+                <Text style={[styles.emptyBannedText, { padding: 16 }]}>Your ignore list is empty.</Text>
+              ) : (
+                ignoredUsers.map((u) => (
+                  <View key={u} style={styles.bannedItem}>
+                    <Text style={styles.bannedNick}>{u}</Text>
+                    <TouchableOpacity
+                      style={styles.unbanBtn}
+                      onPress={() => setIgnoredUsers(prev => prev.filter(x => x !== u))}
+                    >
+                      <Text style={styles.unbanBtnText}>Remove</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+            <TouchableOpacity style={styles.modalCancel} onPress={() => setShowIgnoreList(false)}>
+              <Text style={styles.modalCancelText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </ScreenContainer>
   );
 }
@@ -2060,5 +2241,61 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.6)",
     fontSize: 10,
     letterSpacing: 0.3,
+  },
+  // Settings modal styles
+  settingsRow: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "space-between" as const,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  settingsLabel: {
+    color: "#212121",
+    fontSize: 14,
+    fontWeight: "500" as const,
+  },
+  settingsValue: {
+    color: "#7B1FA2",
+    fontSize: 13,
+    fontWeight: "600" as const,
+  },
+  settingsToggle: {
+    fontSize: 13,
+    fontWeight: "600" as const,
+    color: "#333",
+  },
+  settingsDivider: {
+    height: 1,
+    backgroundColor: "#F0F0F0",
+    marginHorizontal: 16,
+  },
+  settingsStepper: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 8,
+  },
+  stepperBtn: {
+    backgroundColor: "#EDE7F6",
+    borderRadius: 4,
+    width: 28,
+    height: 28,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    borderWidth: 1,
+    borderColor: "#CE93D8",
+  },
+  stepperBtnText: {
+    color: "#7B1FA2",
+    fontSize: 16,
+    fontWeight: "bold" as const,
+    lineHeight: 18,
+  },
+  stepperValue: {
+    color: "#212121",
+    fontSize: 13,
+    fontWeight: "600" as const,
+    minWidth: 36,
+    textAlign: "center" as const,
   },
 });

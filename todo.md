@@ -143,3 +143,16 @@
 - [x] Add Change Password feature in Profile screen (current password + new password + confirm)
 - [x] Add changePassword tRPC endpoint on server
 - [x] Rebuild chat room screen to match latest Yahoo Chat room exactly (header, toolbar, messages, user panel, input row)
+- [x] Implement Chat Tools dropdown with all real Yahoo Chat options (My Profile, Friends, Emoticons, Ignore List, Chat Rules, Help, Admin Tools)
+- [x] Implement Settings dropdown with all real Yahoo Chat options (Font size, Sound alerts, Timestamps, Status, Notification Sound)
+- [x] Implement Favorite Rooms dropdown showing all 10 rooms with quick-switch
+- [x] Remove Report Abuse button from toolbar (replaced with text color button A)
+- [x] Fix profile picture not persisting after logout/login (save avatar URL to AsyncStorage)
+- [x] Remove "Powered by Manus" from all screens
+- [x] Remove "Invite Friends to Later!" button from login/rooms screen
+- [x] Implement Status Picker modal (Available, Busy, BRB, Away, On the Phone, Out to Lunch, Invisible)
+- [x] Implement Ignore List modal (view and remove ignored users)
+- [ ] Fix private messaging end-to-end (delivery, notifications, PM screen)
+- [ ] Fix voice chat between two users (WebRTC signaling, audio playback)
+- [ ] Add Find User feature to Friends screen (search by username)
+- [ ] Full end-to-end review: test every screen and flow

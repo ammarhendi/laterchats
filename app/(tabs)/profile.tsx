@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   View,
   Text,
@@ -49,11 +50,23 @@ export default function ProfileScreen() {
   const updateProfileMutation = trpc.user.updateProfile.useMutation();
   const changePasswordMutation = trpc.user.changePassword.useMutation();
 
+  // Load cached avatar from AsyncStorage immediately (before DB query returns)
+  useEffect(() => {
+    if (!username) return;
+    AsyncStorage.getItem(`later_avatar_${username.toLowerCase()}`).then((cached) => {
+      if (cached && !avatarUrl) setAvatarUrl(cached);
+    });
+  }, [username]);
+
   useEffect(() => {
     if (profile) {
       setDisplayName(profile.displayName || "");
       setStatusMessage(profile.statusMessage || "");
-      setAvatarUrl(profile.avatarUrl || null);
+      if (profile.avatarUrl) {
+        setAvatarUrl(profile.avatarUrl);
+        // Keep AsyncStorage in sync with DB
+        AsyncStorage.setItem(`later_avatar_${username.toLowerCase()}`, profile.avatarUrl);
+      }
     }
   }, [profile]);
 

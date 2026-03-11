@@ -465,11 +465,6 @@ export default function WelcomeScreen() {
             </View>
           </View>
 
-          {/* Share button */}
-          <TouchableOpacity style={styles.ymShareBtn} onPress={handleShare} activeOpacity={0.8}>
-            <Text style={styles.ymShareBtnText}>📤  Invite Friends to Later!</Text>
-          </TouchableOpacity>
-
           {/* Copyright */}
           <View style={styles.ymCopyright}>
             <Text style={styles.ymCopyrightTitle}>Later!</Text>
