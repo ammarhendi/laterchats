@@ -64,7 +64,7 @@ importers:
         version: 16.6.1
       drizzle-orm:
         specifier: ^0.44.7
-        version: 0.44.7(mysql2@3.16.0)
+        version: 0.44.7(mysql2@3.16.0)(postgres@3.4.8)
       expo:
         specifier: ~54.0.29
         version: 54.0.29(@babel/core@7.28.5)(@expo/metro-runtime@6.1.2)(expo-router@6.0.19)(react-native@0.81.5(@babel/core@7.28.5)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
@@ -161,6 +161,9 @@ importers:
       nodemailer:
         specifier: ^8.0.2
         version: 8.0.2
+      postgres:
+        specifier: ^3.4.8
+        version: 3.4.8
       react:
         specifier: 19.1.0
         version: 19.1.0
@@ -5243,6 +5246,10 @@ packages:
     resolution: {integrity: sha512-3Ybi1tAuwAP9s0r1UQ2J4n5Y0G05bJkpUIO0/bI9MhwmD70S5aTWbXGBwxHrelT+XM1k6dM0pk+SwNkpTRN7Pg==}
     engines: {node: ^10 || ^12 || >=14}
 
+  postgres@3.4.8:
+    resolution: {integrity: sha512-d+JFcLM17njZaOLkv6SCev7uoLaBtfK86vMUXhW1Z4glPWh4jozno9APvW/XKFJ3CCxVoC7OL38BqRydtu5nGg==}
+    engines: {node: '>=12'}
+
   prelude-ls@1.2.1:
     resolution: {integrity: sha512-vkcDPrRZo1QZLbn5RLGPpg/WmIQ65qoWWhcGKf/b5eplkkarX0m9z8ppCat4mlOqUsWpyNuYgO3VRyrYHSzX5g==}
     engines: {node: '>= 0.8.0'}
@@ -9553,9 +9560,10 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  drizzle-orm@0.44.7(mysql2@3.16.0):
+  drizzle-orm@0.44.7(mysql2@3.16.0)(postgres@3.4.8):
     optionalDependencies:
       mysql2: 3.16.0
+      postgres: 3.4.8
 
   dunder-proto@1.0.1:
     dependencies:
@@ -11897,6 +11905,8 @@ snapshots:
       nanoid: 3.3.11
       picocolors: 1.1.1
       source-map-js: 1.2.1
+
+  postgres@3.4.8: {}
 
   prelude-ls@1.2.1: {}
 

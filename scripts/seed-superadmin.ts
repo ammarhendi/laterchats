@@ -4,37 +4,30 @@
  */
 import "../scripts/load-env.js";
 import bcrypt from "bcryptjs";
-import { drizzle } from "drizzle-orm/mysql2";
-import mysql from "mysql2/promise";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
 import { chatUsers } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
-
 const BCRYPT_ROUNDS = 12;
-
 const SUPER_ADMINS = [
   { username: "Ammar", email: "ammar.hendi@hotmail.com", password: "fjyY1&$7" },
   { username: "Later", email: "ammar.hendi+later@hotmail.com", password: "fjyY1&$7" },
 ];
-
 async function main() {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
     console.error("❌ DATABASE_URL not set. Cannot seed super admin accounts.");
     process.exit(1);
   }
-
-  const connection = await mysql.createConnection(connectionString);
-  const db = drizzle(connection);
-
+  const client = postgres(connectionString);
+  const db = drizzle(client);
   for (const admin of SUPER_ADMINS) {
     const existing = await db
       .select()
       .from(chatUsers)
       .where(eq(chatUsers.username, admin.username))
       .limit(1);
-
     if (existing.length > 0) {
-      // Update password and email in case they changed
       const passwordHash = await bcrypt.hash(admin.password, BCRYPT_ROUNDS);
       await db
         .update(chatUsers)
@@ -47,16 +40,14 @@ async function main() {
         username: admin.username,
         passwordHash,
         email: admin.email,
-        dateOfBirth: new Date("1990-01-01"),
+        dateOfBirth: new Date("1990-01-01").toISOString().split("T")[0],
       });
       console.log(`✅ Created new account: ${admin.username}`);
     }
   }
-
-  await connection.end();
+  await client.end();
   console.log("🎉 Super admin accounts are ready. Login with username Ammar or Later and password fjyY1&$7");
 }
-
 main().catch((err) => {
   console.error("❌ Seed failed:", err);
   process.exit(1);

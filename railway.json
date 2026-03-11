@@ -5,7 +5,7 @@
     "buildCommand": "pnpm install && pnpm build:server"
   },
   "deploy": {
-    "startCommand": "pnpm start",
+    "startCommand": "pnpm db:push && pnpm start",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 5
   }
