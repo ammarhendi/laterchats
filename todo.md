@@ -142,3 +142,4 @@
 - [x] Seed Ammar and Later super admin accounts in database with provided credentials
 - [x] Add Change Password feature in Profile screen (current password + new password + confirm)
 - [x] Add changePassword tRPC endpoint on server
+- [x] Rebuild chat room screen to match latest Yahoo Chat room exactly (header, toolbar, messages, user panel, input row)

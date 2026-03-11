@@ -483,55 +483,76 @@ export default function ChatScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={0}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <Text style={styles.headerLogo}>Later</Text>
-            <Text style={styles.headerChat}>Chat</Text>
-          </View>
-          <View style={styles.headerRight}>
+        {/* Row 1: YAHOO! Chat logo bar — "You are in [Room]" | Help - Exit */}
+        <View style={styles.ymTopBar}>
+          <View style={styles.ymTopBarLeft}>
+            <Text style={styles.ymLogoLater}>Later!</Text>
+            <Text style={styles.ymLogoChat}>Chat</Text>
             <View style={[styles.connDot, isConnected ? styles.connDotOn : styles.connDotOff]} />
-            <Text style={styles.headerRoom}>{roomName}</Text>
-            <Text style={styles.headerCount}>[{users.length}]</Text>
-            {isAdmin && (
-              <>
-                <TouchableOpacity
-                  onPress={() => {
-                    Alert.alert(
-                      "Clear Chat",
-                      "Clear ALL messages for everyone in the room?",
-                      [
-                        { text: "Cancel", style: "cancel" },
-                        {
-                          text: "Clear", style: "destructive", onPress: () => {
-                            clearAllMessages();
-                          }
-                        },
-                      ]
-                    );
-                  }}
-                  style={styles.clearBtn}
-                >
-                  <Text style={styles.clearBtnText}>Clear Chat</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => setShowAdminPanel(true)} style={styles.adminBtn}>
-                  <Text style={styles.adminBtnText}>👑</Text>
-                </TouchableOpacity>
-              </>
-            )}
-            <TouchableOpacity onPress={() => setShowRoomSwitcher(true)} style={styles.roomSwitchBtn}>
-              <Text style={styles.roomSwitchBtnText}>🔀</Text>
+          </View>
+          <Text style={styles.ymRoomTitle} numberOfLines={1}>
+            You are in <Text style={styles.ymRoomTitleBold}>{roomName}</Text>
+          </Text>
+          <View style={styles.ymTopBarRight}>
+            <TouchableOpacity onPress={() => Alert.alert("Help", "Later! Chat Help\n\n• Click a username to PM, ignore, or report.\n• Use Voice: Talk to speak in the room.\n• Change Room to browse other rooms.\n• Exit to leave the chat.")}>
+              <Text style={styles.ymHelpLink}>Help</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={handleLeave} style={styles.exitBtn}>
-              <Text style={styles.exitBtnText}>EXIT</Text>
+            <Text style={styles.ymTopBarSep}> - </Text>
+            <TouchableOpacity onPress={handleLeave}>
+              <Text style={styles.ymExitLink}>Exit</Text>
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Welcome banner */}
+        {/* Row 2: Chat Tools | Settings | Favorite Rooms | Change Room */}
+        <View style={styles.ymNavBar}>
+          <TouchableOpacity
+            style={styles.ymNavBtn}
+            onPress={() => {
+              if (isAdmin) setShowAdminPanel(true);
+              else Alert.alert("Chat Tools", "Available tools:\n• Change font style\n• Set preferences\n• View chat rules");
+            }}
+          >
+            <Text style={styles.ymNavBtnText}>Chat Tools ▾</Text>
+          </TouchableOpacity>
+          <View style={styles.ymNavSep} />
+          <TouchableOpacity
+            style={styles.ymNavBtn}
+            onPress={() => Alert.alert("Settings", "Chat settings:\n• Font size\n• Sound alerts\n• Ignore list")}
+          >
+            <Text style={styles.ymNavBtnText}>Settings ▾</Text>
+          </TouchableOpacity>
+          <View style={styles.ymNavSep} />
+          <TouchableOpacity
+            style={styles.ymNavBtn}
+            onPress={() => router.push("/(tabs)/" as any)}
+          >
+            <Text style={styles.ymNavBtnText}>Favorite Rooms ▾</Text>
+          </TouchableOpacity>
+          <View style={styles.ymNavSep} />
+          <TouchableOpacity
+            style={[styles.ymNavBtn, styles.ymNavBtnHighlight]}
+            onPress={() => setShowRoomSwitcher(true)}
+          >
+            <Text style={[styles.ymNavBtnText, styles.ymNavBtnHighlightText]}>⊕ Change Room</Text>
+          </TouchableOpacity>
+          {isAdmin && (
+            <>
+              <View style={styles.ymNavSep} />
+              <TouchableOpacity
+                style={[styles.ymNavBtn, { backgroundColor: "#C62828" }]}
+                onPress={handleClearChat}
+              >
+                <Text style={[styles.ymNavBtnText, { color: "#fff" }]}>Clear Chat</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+
+        {/* Welcome system message */}
         <View style={styles.welcomeBanner}>
           <Text style={styles.welcomeText}>
-            Welcome to Later Chat, <Text style={styles.welcomeNick}>{getRoleBadge(myRole)}{nickname}</Text>
+            Welcome to Later! Chat, <Text style={styles.welcomeNick}>{getRoleBadge(myRole)}{nickname}</Text>
           </Text>
           <Text style={styles.welcomeSubText}>
             You are in <Text style={styles.boldText}>{roomName}</Text> · All conversations are fully secured &amp; private 🔒
@@ -556,11 +577,23 @@ export default function ChatScreen() {
             />
           </View>
 
-          {/* Chatters panel — Yahoo Chat style */}
+          {/* Chatters panel — Latest Yahoo Chat style */}
           <View style={styles.usersPanel}>
+            {/* "Chatters" header with Menu and Emotions dropdowns */}
             <View style={styles.usersPanelHeader}>
-              <Text style={styles.usersPanelTitle}>WHO'S CHATTING</Text>
-              <Text style={styles.usersPanelCount}>({users.length})</Text>
+              <Text style={styles.usersPanelTitle}>Chatters</Text>
+            </View>
+            <View style={styles.usersPanelSubBar}>
+              <TouchableOpacity style={styles.usersPanelDropBtn}
+                onPress={() => Alert.alert("Menu", "Options:\n• View Profile\n• Add to Friends\n• Ignore User")}
+              >
+                <Text style={styles.usersPanelDropText}>Menu ▾</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.usersPanelDropBtn}
+                onPress={() => setShowEmoji(!showEmoji)}
+              >
+                <Text style={styles.usersPanelDropText}>Emotions ▾</Text>
+              </TouchableOpacity>
             </View>
             <FlatList
               data={users}
@@ -578,54 +611,49 @@ export default function ChatScreen() {
           </View>
         </View>
 
-        {/* Toolbar — Yahoo Chat style: B I U | Emotions | Friends | Stop Voice */}
+        {/* Toolbar — Latest Yahoo Chat style: B/I/U/😊 | Arial | 10 | Report Abuse | Send */}
         <View style={styles.toolbar}>
-          {/* Text formatting */}
+          {/* B button */}
           <TouchableOpacity
             style={[styles.ymToolBtn, isBold && styles.ymToolBtnActive]}
             onPress={() => setIsBold(!isBold)}
           >
             <Text style={[styles.ymToolBtnText, { fontWeight: "900" }]}>B</Text>
           </TouchableOpacity>
+          {/* I button */}
           <TouchableOpacity
             style={[styles.ymToolBtn, isItalic && styles.ymToolBtnActive]}
             onPress={() => setIsItalic(!isItalic)}
           >
             <Text style={[styles.ymToolBtnText, { fontStyle: "italic" }]}>I</Text>
           </TouchableOpacity>
-          <View style={styles.toolbarDivider} />
-          {/* Emotions (emoji) */}
+          {/* U button */}
+          <TouchableOpacity style={styles.ymToolBtn}>
+            <Text style={[styles.ymToolBtnText, { textDecorationLine: "underline" }]}>U</Text>
+          </TouchableOpacity>
+          {/* Emoji / Emotions */}
           <TouchableOpacity style={[styles.ymToolBtn, showEmoji && styles.ymToolBtnActive]} onPress={() => setShowEmoji(!showEmoji)}>
             <Text style={styles.ymToolBtnText}>😊</Text>
           </TouchableOpacity>
           <View style={styles.toolbarDivider} />
-          {/* Friends shortcut */}
-          <TouchableOpacity style={styles.ymToolBtn} onPress={() => router.push("/(tabs)/friends" as any)}>
-            <Text style={[styles.ymToolBtnText, { fontSize: 10 }]}>Friends</Text>
-          </TouchableOpacity>
+          {/* Font selector (decorative) */}
+          <View style={styles.ymFontSelect}>
+            <Text style={styles.ymFontSelectText}>Arial ▾</Text>
+          </View>
+          {/* Font size selector (decorative) */}
+          <View style={styles.ymSizeSelect}>
+            <Text style={styles.ymSizeSelectText}>10 ▾</Text>
+          </View>
           <View style={styles.toolbarDivider} />
-          {/* Stop Voice / Start Voice */}
+          {/* Report Abuse */}
           <TouchableOpacity
-            style={[styles.ymToolBtn, isVoiceEnabled && { backgroundColor: "#FB8C00", borderColor: "#E65100" }]}
-            onPress={handleToggleVoice}
+            style={styles.ymReportBtn}
+            onPress={() => Alert.alert("Report Abuse", "To report a user, tap their name in the Chatters panel and select the appropriate action.")}
           >
-            <Text style={[styles.ymToolBtnText, { fontSize: 10 }, isVoiceEnabled && { color: "#fff" }]}>
-              {isVoiceEnabled ? "Stop Voice" : "Voice"}
-            </Text>
+            <Text style={styles.ymReportBtnText}>Report Abuse</Text>
           </TouchableOpacity>
           <View style={{ flex: 1 }} />
-          {/* Local clear */}
-          <TouchableOpacity
-            style={styles.localClearBtn}
-            onPress={() =>
-              Alert.alert("Clear Screen", "Clear messages from your screen only?", [
-                { text: "Cancel", style: "cancel" },
-                { text: "Clear", style: "destructive", onPress: () => clearMessages() },
-              ])
-            }
-          >
-            <Text style={styles.localClearBtnText}>Clear</Text>
-          </TouchableOpacity>
+          {/* Mod panel */}
           {isMod && (
             <TouchableOpacity style={styles.ymToolBtn} onPress={() => router.push("/admin" as any)}>
               <Text style={[styles.ymToolBtnText, { fontSize: 10 }]}>⚙️ Mod</Text>
@@ -644,15 +672,15 @@ export default function ChatScreen() {
           </View>
         )}
 
-        {/* Chat input — Yahoo Chat style with Send / PM / Ignore / More */}
+        {/* Chat input row — Latest Yahoo Chat: Chat: [input] [Send] | IM | Ignore */}
         <View style={styles.inputRow}>
           <Text style={styles.inputLabel}>Chat:</Text>
           <TextInput
             style={[styles.chatInput, isTextMuted && styles.chatInputMuted]}
             value={inputText}
             onChangeText={setInputText}
-            placeholder={isTextMuted ? "You are muted..." : "Type a message..."}
-            placeholderTextColor="#666"
+            placeholder={isTextMuted ? "You are muted..." : ""}
+            placeholderTextColor="#999"
             returnKeyType="send"
             onSubmitEditing={handleSend}
             multiline={false}
@@ -665,6 +693,40 @@ export default function ChatScreen() {
           >
             <Text style={styles.sendBtnText}>Send</Text>
           </TouchableOpacity>
+        </View>
+
+        {/* Voice bar + IM/Ignore + Status — Latest Yahoo Chat bottom row */}
+        <View style={styles.voiceBar}>
+          {/* Voice section */}
+          <Text style={styles.voiceLabel}>Voice:</Text>
+          {isVoiceBanned ? (
+            <Text style={styles.voiceBannedText}>🚫 Banned</Text>
+          ) : (
+            <>
+              <TouchableOpacity
+                style={styles.handsFreeBtn}
+                onPress={handleToggleVoice}
+              >
+                <Text style={styles.handsFreeText}>
+                  {isVoiceEnabled ? "☑" : "☐"} Hands-free
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.talkBtn, !isMuted && styles.talkBtnActive]}
+                onPress={handleToggleVoice}
+              >
+                <Text style={styles.talkBtnText}>Talk</Text>
+              </TouchableOpacity>
+              <View style={styles.voiceStatus}>
+                <Text style={styles.voiceStatusText}>
+                  {!isMuted ? "(● Active)" : "(Ready)"}
+                </Text>
+              </View>
+            </>
+          )}
+          {voiceError ? <Text style={styles.voiceError}>{voiceError}</Text> : null}
+          <View style={{ flex: 1 }} />
+          {/* IM and Ignore buttons — right side of voice bar */}
           <TouchableOpacity
             style={styles.ymInputActionBtn}
             onPress={() => {
@@ -674,10 +736,11 @@ export default function ChatScreen() {
               } else if (users.length > 0) {
                 const other = users.find(u => u.nickname !== nickname);
                 if (other) router.push(`/pm/${other.nickname}` as any);
+                else Alert.alert("IM", "Tap a user in the Chatters list first.");
               }
             }}
           >
-            <Text style={styles.ymInputActionBtnText}>PM</Text>
+            <Text style={styles.ymInputActionBtnText}>IM</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.ymInputActionBtn}
@@ -685,54 +748,23 @@ export default function ChatScreen() {
               if (selectedUser && selectedUser.role !== "super_admin") {
                 Alert.alert("Ignored", `${selectedUser.nickname} has been ignored.`);
               } else {
-                Alert.alert("Ignore", "Tap a user in the list first, then press Ignore.");
+                Alert.alert("Ignore", "Tap a user in the Chatters list first.");
               }
             }}
           >
             <Text style={styles.ymInputActionBtnText}>Ignore</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.ymInputActionBtn}
-            onPress={() => {
-              if (selectedUser) {
-                setShowUserModal(true);
-              } else {
-                Alert.alert("More", "Tap a user in the list to see more options.");
-              }
-            }}
-          >
-            <Text style={styles.ymInputActionBtnText}>More</Text>
-          </TouchableOpacity>
         </View>
 
-        {/* Voice bar */}
-        <View style={styles.voiceBar}>
-          <Text style={styles.voiceLabel}>Voice:</Text>
-          {isVoiceBanned ? (
-            <Text style={styles.voiceBannedText}>🚫 Voice banned</Text>
-          ) : (
-            <>
-              <TouchableOpacity
-                style={[styles.voiceBtn, !isMuted && styles.voiceBtnActive]}
-                onPress={handleToggleVoice}
-              >
-                <Text style={styles.voiceBtnText}>
-                  {isMuted ? "🎤 Unmute" : "🔇 Mute"}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.talkBtn} onPress={handleToggleVoice}>
-                <Text style={styles.talkBtnText}>Talk</Text>
-              </TouchableOpacity>
-              <View style={[styles.voiceStatus, !isMuted && styles.voiceStatusActive]}>
-                <Text style={styles.voiceStatusText}>
-                  {!isMuted ? "● Active" : "○ Ready"}
-                </Text>
-              </View>
-            </>
-          )}
-          {voiceError ? (
-            <Text style={styles.voiceError}>{voiceError}</Text>
-          ) : null}
+        {/* Status bar — Latest Yahoo Chat: "Status: I'm Available" */}
+        <View style={styles.statusBar}>
+          <Text style={styles.statusBarLabel}>Status:</Text>
+          <TouchableOpacity
+            style={styles.statusDropdown}
+            onPress={() => Alert.alert("Status", "Change your status:\n• I'm Available\n• Busy\n• Be Right Back\n• Away\n• Invisible")}
+          >
+            <Text style={styles.statusDropdownText}>I'm Available ▾</Text>
+          </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
 
@@ -1008,31 +1040,111 @@ export default function ChatScreen() {
 }
 
 const styles = StyleSheet.create({
-  // ── Yahoo Messenger style ────────────────────────────────────────────────
-  header: {
-    backgroundColor: "#7B1FA2",
+  // ── Yahoo Chat latest version header ────────────────────────────────────
+  // Row 1: Logo | Room title | Help - Exit
+  ymTopBar: {
+    backgroundColor: "#FFFFFF",
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 12,
-    paddingVertical: 9,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: "#CCCCCC",
+    gap: 6,
   },
+  ymTopBarLeft: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 2,
+    flexShrink: 0,
+  },
+  ymLogoLater: {
+    color: "#5C0080",
+    fontWeight: "900",
+    fontSize: 17,
+    letterSpacing: -0.5,
+  },
+  ymLogoChat: {
+    color: "#FF8C00",
+    fontWeight: "900",
+    fontSize: 17,
+    marginLeft: 1,
+  },
+  ymRoomTitle: {
+    flex: 1,
+    color: "#333333",
+    fontSize: 12,
+    textAlign: "center",
+  },
+  ymRoomTitleBold: {
+    fontWeight: "bold",
+    color: "#5C0080",
+  },
+  ymTopBarRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexShrink: 0,
+  },
+  ymHelpLink: {
+    color: "#0066CC",
+    fontSize: 12,
+    textDecorationLine: "underline",
+  },
+  ymTopBarSep: {
+    color: "#999999",
+    fontSize: 12,
+  },
+  ymExitLink: {
+    color: "#CC0000",
+    fontSize: 12,
+    fontWeight: "bold",
+    textDecorationLine: "underline",
+  },
+  // Row 2: Chat Tools | Settings | Favorite Rooms | Change Room
+  ymNavBar: {
+    backgroundColor: "#E8E8E8",
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 4,
+    paddingVertical: 3,
+    borderBottomWidth: 1,
+    borderBottomColor: "#BBBBBB",
+    flexWrap: "nowrap",
+    overflow: "hidden",
+  },
+  ymNavBtn: {
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 3,
+    backgroundColor: "#F5F5F5",
+    borderWidth: 1,
+    borderColor: "#CCCCCC",
+    marginHorizontal: 1,
+  },
+  ymNavBtnHighlight: {
+    backgroundColor: "#5C0080",
+    borderColor: "#3D0060",
+  },
+  ymNavBtnHighlightText: {
+    color: "#FFFFFF",
+    fontWeight: "bold",
+  },
+  ymNavBtnText: {
+    color: "#333333",
+    fontSize: 10,
+    fontWeight: "600",
+  },
+  ymNavSep: {
+    width: 1,
+    height: 14,
+    backgroundColor: "#BBBBBB",
+    marginHorizontal: 2,
+  },
+  // Legacy header refs (kept for modal title reuse)
   headerLeft: {
     flexDirection: "row",
     alignItems: "baseline",
     gap: 2,
-  },
-  headerLogo: {
-    color: "#fff",
-    fontWeight: "900",
-    fontSize: 18,
-    letterSpacing: -0.5,
-  },
-  headerChat: {
-    color: "rgba(255,255,255,0.75)",
-    fontWeight: "400",
-    fontSize: 13,
-    marginLeft: 4,
   },
   headerRight: {
     flexDirection: "row",
@@ -1167,27 +1279,48 @@ const styles = StyleSheet.create({
     color: "#424242",
     fontStyle: "italic",
   },
-  // Users panel — YM contact list style
+  // Users panel — Latest Yahoo Chat Chatters panel
   usersPanel: {
-    width: 108,
+    width: 112,
     backgroundColor: "#F5F5F5",
     borderLeftWidth: 1,
-    borderLeftColor: "#E0E0E0",
+    borderLeftColor: "#CCCCCC",
   },
   usersPanelHeader: {
-    backgroundColor: "#4A0072",
-    paddingVertical: 5,
+    backgroundColor: "#D0D0D0",
+    paddingVertical: 4,
     paddingHorizontal: 6,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    borderBottomWidth: 1,
+    borderBottomColor: "#BBBBBB",
   },
   usersPanelTitle: {
-    color: "#FFD700",
+    color: "#333333",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  usersPanelSubBar: {
+    flexDirection: "row",
+    backgroundColor: "#E8E8E8",
+    borderBottomWidth: 1,
+    borderBottomColor: "#CCCCCC",
+    paddingHorizontal: 2,
+    paddingVertical: 2,
+    gap: 2,
+  },
+  usersPanelDropBtn: {
+    flex: 1,
+    backgroundColor: "#F5F5F5",
+    borderWidth: 1,
+    borderColor: "#CCCCCC",
+    borderRadius: 2,
+    paddingVertical: 2,
+    paddingHorizontal: 3,
+    alignItems: "center",
+  },
+  usersPanelDropText: {
     fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 0.3,
-    textTransform: "uppercase",
+    color: "#333333",
+    fontWeight: "600",
   },
   usersPanelCount: {
     color: "rgba(255,255,255,0.7)",
@@ -1223,6 +1356,48 @@ const styles = StyleSheet.create({
   mutedIcon: {
     fontSize: 10,
     marginLeft: 2,
+  },
+  // Yahoo Chat toolbar extras
+  ymFontSelect: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#BDBDBD",
+    borderRadius: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    minWidth: 52,
+    justifyContent: "center",
+  },
+  ymFontSelectText: {
+    fontSize: 11,
+    color: "#333",
+  },
+  ymSizeSelect: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#BDBDBD",
+    borderRadius: 3,
+    paddingHorizontal: 5,
+    paddingVertical: 4,
+    minWidth: 34,
+    alignItems: "center",
+  },
+  ymSizeSelectText: {
+    fontSize: 11,
+    color: "#333",
+  },
+  ymReportBtn: {
+    backgroundColor: "#FFF3E0",
+    borderWidth: 1,
+    borderColor: "#FFCC80",
+    borderRadius: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+  },
+  ymReportBtnText: {
+    fontSize: 10,
+    color: "#E65100",
+    fontWeight: "600",
   },
   // Yahoo Chat-style toolbar buttons
   ymToolBtn: {
@@ -1412,7 +1587,45 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "600",
   },
-  // Voice bar — YM Talk button style
+  // Status bar — Latest Yahoo Chat bottom
+  statusBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#EEEEEE",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderTopWidth: 1,
+    borderTopColor: "#CCCCCC",
+    gap: 6,
+  },
+  statusBarLabel: {
+    color: "#555555",
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  statusDropdown: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#CCCCCC",
+    borderRadius: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  statusDropdownText: {
+    color: "#333333",
+    fontSize: 11,
+  },
+  // Hands-free checkbox
+  handsFreeBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginRight: 4,
+  },
+  handsFreeText: {
+    color: "#333333",
+    fontSize: 11,
+  },
+  // Voice bar — Latest Yahoo Chat
   voiceBar: {
     flexDirection: "row",
     alignItems: "center",
@@ -1447,10 +1660,16 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   talkBtn: {
-    backgroundColor: "#7B1FA2",
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 4,
+    backgroundColor: "#DDDDDD",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 3,
+    borderWidth: 1,
+    borderColor: "#BBBBBB",
+  },
+  talkBtnActive: {
+    backgroundColor: "#FB8C00",
+    borderColor: "#E65100",
   },
   talkBtnText: {
     color: "#fff",
