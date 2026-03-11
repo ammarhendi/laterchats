@@ -133,3 +133,8 @@
 - [x] Add Profile screen with photo upload, display name, status message
 - [x] Add avatar upload REST endpoint to server
 - [x] Wire Profile tab into tab navigation
+- [x] Yahoo Chat toolbar: B/I/U formatting, Emotions, Friends shortcut, Stop Voice button
+- [x] Yahoo Chat input row: PM, Ignore, More buttons added
+- [x] WHO'S CHATTING panel header with gold text on dark purple
+- [x] Room selection: folder icons, user counts in brackets, info bar
+- [x] Friends screen: Later! Messenger header, I'm Available status, Online/Offline group headers

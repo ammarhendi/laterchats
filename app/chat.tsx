@@ -556,10 +556,11 @@ export default function ChatScreen() {
             />
           </View>
 
-          {/* Users panel */}
+          {/* Chatters panel — Yahoo Chat style */}
           <View style={styles.usersPanel}>
             <View style={styles.usersPanelHeader}>
-              <Text style={styles.usersPanelTitle}>Users ({users.length})</Text>
+              <Text style={styles.usersPanelTitle}>WHO'S CHATTING</Text>
+              <Text style={styles.usersPanelCount}>({users.length})</Text>
             </View>
             <FlatList
               data={users}
@@ -577,13 +578,43 @@ export default function ChatScreen() {
           </View>
         </View>
 
-        {/* Toolbar */}
+        {/* Toolbar — Yahoo Chat style: B I U | Emotions | Friends | Stop Voice */}
         <View style={styles.toolbar}>
-          <TouchableOpacity style={styles.toolbarBtn} onPress={() => setShowEmoji(!showEmoji)}>
-            <Text style={styles.toolbarBtnText}>😊</Text>
+          {/* Text formatting */}
+          <TouchableOpacity
+            style={[styles.ymToolBtn, isBold && styles.ymToolBtnActive]}
+            onPress={() => setIsBold(!isBold)}
+          >
+            <Text style={[styles.ymToolBtnText, { fontWeight: "900" }]}>B</Text>
           </TouchableOpacity>
-          <Text style={styles.toolbarSep}>|</Text>
-          {/* Local clear — clears only this user's screen */}
+          <TouchableOpacity
+            style={[styles.ymToolBtn, isItalic && styles.ymToolBtnActive]}
+            onPress={() => setIsItalic(!isItalic)}
+          >
+            <Text style={[styles.ymToolBtnText, { fontStyle: "italic" }]}>I</Text>
+          </TouchableOpacity>
+          <View style={styles.toolbarDivider} />
+          {/* Emotions (emoji) */}
+          <TouchableOpacity style={[styles.ymToolBtn, showEmoji && styles.ymToolBtnActive]} onPress={() => setShowEmoji(!showEmoji)}>
+            <Text style={styles.ymToolBtnText}>😊</Text>
+          </TouchableOpacity>
+          <View style={styles.toolbarDivider} />
+          {/* Friends shortcut */}
+          <TouchableOpacity style={styles.ymToolBtn} onPress={() => router.push("/(tabs)/friends" as any)}>
+            <Text style={[styles.ymToolBtnText, { fontSize: 10 }]}>Friends</Text>
+          </TouchableOpacity>
+          <View style={styles.toolbarDivider} />
+          {/* Stop Voice / Start Voice */}
+          <TouchableOpacity
+            style={[styles.ymToolBtn, isVoiceEnabled && { backgroundColor: "#FB8C00", borderColor: "#E65100" }]}
+            onPress={handleToggleVoice}
+          >
+            <Text style={[styles.ymToolBtnText, { fontSize: 10 }, isVoiceEnabled && { color: "#fff" }]}>
+              {isVoiceEnabled ? "Stop Voice" : "Voice"}
+            </Text>
+          </TouchableOpacity>
+          <View style={{ flex: 1 }} />
+          {/* Local clear */}
           <TouchableOpacity
             style={styles.localClearBtn}
             onPress={() =>
@@ -596,12 +627,9 @@ export default function ChatScreen() {
             <Text style={styles.localClearBtnText}>Clear</Text>
           </TouchableOpacity>
           {isMod && (
-            <>
-              <Text style={styles.toolbarSep}>|</Text>
-              <TouchableOpacity style={styles.toolbarBtn} onPress={() => router.push("/admin" as any)}>
-                <Text style={styles.toolbarBtnText}>⚙️</Text>
-              </TouchableOpacity>
-            </>
+            <TouchableOpacity style={styles.ymToolBtn} onPress={() => router.push("/admin" as any)}>
+              <Text style={[styles.ymToolBtnText, { fontSize: 10 }]}>⚙️ Mod</Text>
+            </TouchableOpacity>
           )}
         </View>
 
@@ -616,7 +644,7 @@ export default function ChatScreen() {
           </View>
         )}
 
-        {/* Chat input */}
+        {/* Chat input — Yahoo Chat style with Send / PM / Ignore / More */}
         <View style={styles.inputRow}>
           <Text style={styles.inputLabel}>Chat:</Text>
           <TextInput
@@ -636,6 +664,44 @@ export default function ChatScreen() {
             disabled={isTextMuted}
           >
             <Text style={styles.sendBtnText}>Send</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.ymInputActionBtn}
+            onPress={() => {
+              if (selectedUser) {
+                markPMRead(selectedUser.nickname);
+                router.push(`/pm/${selectedUser.nickname}` as any);
+              } else if (users.length > 0) {
+                const other = users.find(u => u.nickname !== nickname);
+                if (other) router.push(`/pm/${other.nickname}` as any);
+              }
+            }}
+          >
+            <Text style={styles.ymInputActionBtnText}>PM</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.ymInputActionBtn}
+            onPress={() => {
+              if (selectedUser && selectedUser.role !== "super_admin") {
+                Alert.alert("Ignored", `${selectedUser.nickname} has been ignored.`);
+              } else {
+                Alert.alert("Ignore", "Tap a user in the list first, then press Ignore.");
+              }
+            }}
+          >
+            <Text style={styles.ymInputActionBtnText}>Ignore</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.ymInputActionBtn}
+            onPress={() => {
+              if (selectedUser) {
+                setShowUserModal(true);
+              } else {
+                Alert.alert("More", "Tap a user in the list to see more options.");
+              }
+            }}
+          >
+            <Text style={styles.ymInputActionBtnText}>More</Text>
           </TouchableOpacity>
         </View>
 
@@ -1109,14 +1175,24 @@ const styles = StyleSheet.create({
     borderLeftColor: "#E0E0E0",
   },
   usersPanelHeader: {
-    backgroundColor: "#7B1FA2",
+    backgroundColor: "#4A0072",
     paddingVertical: 5,
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   usersPanelTitle: {
-    color: "#fff",
-    fontSize: 11,
-    fontWeight: "700",
+    color: "#FFD700",
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
+  },
+  usersPanelCount: {
+    color: "rgba(255,255,255,0.7)",
+    fontSize: 10,
+    fontWeight: "600",
   },
   usersList: {
     flex: 1,
@@ -1147,6 +1223,33 @@ const styles = StyleSheet.create({
   mutedIcon: {
     fontSize: 10,
     marginLeft: 2,
+  },
+  // Yahoo Chat-style toolbar buttons
+  ymToolBtn: {
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 3,
+    borderWidth: 1,
+    borderColor: "#BDBDBD",
+    minWidth: 28,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  ymToolBtnActive: {
+    backgroundColor: "#EDE7F6",
+    borderColor: "#7B1FA2",
+  },
+  ymToolBtnText: {
+    fontSize: 12,
+    color: "#333",
+    fontWeight: "600",
+  },
+  toolbarDivider: {
+    width: 1,
+    height: 16,
+    backgroundColor: "#BDBDBD",
+    marginHorizontal: 3,
   },
   // Toolbar
   toolbar: {
@@ -1294,6 +1397,20 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "700",
     fontSize: 13,
+  },
+  // PM / Ignore / More buttons (Yahoo Chat input row)
+  ymInputActionBtn: {
+    backgroundColor: "#EEEEEE",
+    paddingHorizontal: 7,
+    paddingVertical: 7,
+    borderRadius: 3,
+    borderWidth: 1,
+    borderColor: "#BDBDBD",
+  },
+  ymInputActionBtnText: {
+    color: "#333",
+    fontSize: 11,
+    fontWeight: "600",
   },
   // Voice bar — YM Talk button style
   voiceBar: {

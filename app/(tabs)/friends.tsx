@@ -134,25 +134,32 @@ export default function FriendsScreen() {
 
   return (
     <ScreenContainer containerClassName="bg-white">
-      {/* Header */}
+      {/* Yahoo Messenger-style header */}
       <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <View style={styles.headerLeft}>
-            <FriendAvatar username={username} size={38} />
-            <View style={{ marginLeft: 10 }}>
-              <Text style={styles.headerUsername}>{username}</Text>
-              <View style={styles.onlineDot}>
-                <View style={styles.onlineDotCircle} />
-                <Text style={styles.onlineText}>Online</Text>
-              </View>
-            </View>
+        {/* YM logo bar */}
+        <View style={styles.headerLogoBar}>
+          <View style={{ flexDirection: "row", alignItems: "baseline", gap: 1 }}>
+            <Text style={styles.headerLogoText}>Later</Text>
+            <Text style={[styles.headerLogoText, { color: YM_GOLD }]}>!</Text>
+            <Text style={[styles.headerLogoText, { color: "rgba(255,255,255,0.7)", fontSize: 13, fontWeight: "400" }]}> Messenger</Text>
           </View>
           <TouchableOpacity
             style={styles.addBtn}
             onPress={() => setAddModalVisible(true)}
           >
-            <Text style={styles.addBtnText}>+ Add Friend</Text>
+            <Text style={styles.addBtnText}>+ Add</Text>
           </TouchableOpacity>
+        </View>
+        {/* My status row */}
+        <View style={styles.headerMyStatus}>
+          <FriendAvatar username={username} size={34} />
+          <View style={{ marginLeft: 10, flex: 1 }}>
+            <Text style={styles.headerUsername}>{username}</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+              <View style={styles.onlineDotCircle} />
+              <Text style={styles.onlineText}>I'm Available</Text>
+            </View>
+          </View>
         </View>
       </View>
 
@@ -192,12 +199,26 @@ export default function FriendsScreen() {
                 </View>
               )}
 
-              {/* Friends list */}
+              {/* Friends list — Yahoo Messenger group headers */}
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionHeaderText}>
-                  👥 Friends ({accepted.length})
-                </Text>
+                <Text style={styles.sectionHeaderText}>🟡 Online ({accepted.filter((f: FriendEntry) => f.isOnline).length})</Text>
               </View>
+              {accepted.filter((f: FriendEntry) => f.isOnline).length === 0 && accepted.length > 0 && (
+                <View style={styles.offlineSectionHeader}>
+                  <Text style={styles.offlineSectionHeaderText}>⚪ Offline ({accepted.filter((f: FriendEntry) => !f.isOnline).length})</Text>
+                </View>
+              )}
+              {accepted.filter((f: FriendEntry) => f.isOnline).length > 0 && (
+                <View style={styles.offlineSectionHeader}>
+                  <Text style={styles.offlineSectionHeaderText}>⚪ Offline ({accepted.filter((f: FriendEntry) => !f.isOnline).length})</Text>
+                </View>
+              )}
+              {/* All friends placeholder header for empty state */}
+              {accepted.length === 0 && (
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionHeaderText}>👥 Friends (0)</Text>
+                </View>
+              )}
               {accepted.length === 0 ? (
                 <View style={styles.noFriendsContainer}>
                   <Text style={styles.noFriendsText}>No friends yet.</Text>
@@ -308,10 +329,30 @@ export default function FriendsScreen() {
 const styles = StyleSheet.create({
   header: {
     backgroundColor: YM_PURPLE,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: YM_PURPLE_DARK,
+  },
+  headerLogoBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 6,
+    borderBottomWidth: 0.5,
+    borderBottomColor: "rgba(255,255,255,0.2)",
+  },
+  headerLogoText: {
+    color: "#fff",
+    fontWeight: "800",
+    fontSize: 17,
+    letterSpacing: -0.3,
+  },
+  headerMyStatus: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
   headerTop: {
     flexDirection: "row",
@@ -360,16 +401,32 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   sectionHeader: {
-    backgroundColor: "#f0e6f6",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    backgroundColor: "#EDE7F6",
+    paddingHorizontal: 14,
+    paddingVertical: 6,
     borderBottomWidth: 1,
-    borderBottomColor: "#ddd",
+    borderBottomColor: "#D1C4E9",
   },
   sectionHeaderText: {
     color: YM_PURPLE_DARK,
     fontWeight: "700",
-    fontSize: 13,
+    fontSize: 12,
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  offlineSectionHeader: {
+    backgroundColor: "#F5F5F5",
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E0E0E0",
+  },
+  offlineSectionHeaderText: {
+    color: "#757575",
+    fontWeight: "700",
+    fontSize: 12,
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
   },
   requestCard: {
     flexDirection: "row",

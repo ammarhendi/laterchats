@@ -71,19 +71,14 @@ function RoomCard({ room, onPress }: { room: { id: number; name: string; descrip
   const count = countData?.count ?? 0;
   return (
     <TouchableOpacity style={styles.roomCard} onPress={onPress} activeOpacity={0.7}>
-      {/* Avatar circle with first letter */}
-      <View style={styles.roomAvatar}>
-        <Text style={styles.roomAvatarText}>{room.name.charAt(0)}</Text>
-      </View>
+      {/* Yahoo Chat folder icon */}
+      <Text style={styles.roomFolderIcon}>📁</Text>
       <View style={styles.roomCardContent}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
           <Text style={styles.roomCardName}>{room.name}</Text>
-          {count > 0 && (
-            <View style={styles.roomOnlineBadge}>
-              <View style={styles.onlineDot} />
-              <Text style={styles.roomOnlineText}>{count}</Text>
-            </View>
-          )}
+          {/* User count in brackets — classic Yahoo Chat style */}
+          <Text style={styles.roomCardCount}>({count})</Text>
+          {count > 0 && <View style={styles.onlineDot} />}
         </View>
         <Text style={styles.roomCardDesc} numberOfLines={1}>{room.description}</Text>
       </View>
@@ -278,21 +273,25 @@ export default function WelcomeScreen() {
   if (screen === "rooms") {
     return (
       <ScreenContainer containerClassName="bg-white" safeAreaClassName="bg-white">
-        {/* YM-style purple header */}
+        {/* Yahoo Chat-style header */}
         <ExpoLinearGradient
           colors={[YM.purpleDark, YM.purple, YM.purpleMid]}
           start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
           style={styles.roomsTopBar}
         >
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
             {!SUPER_ADMIN_NICKNAMES.some(n => n.toLowerCase() === pendingNickname.toLowerCase()) && (
               <TouchableOpacity onPress={() => setScreen("auth")} style={styles.roomsBackBtn}>
                 <Text style={styles.roomsBackBtnText}>‹</Text>
               </TouchableOpacity>
             )}
-            <View>
-              <Text style={styles.roomsTopBarTitle}>Chat Rooms</Text>
-              <Text style={styles.roomsTopBarSub}>Welcome, {pendingNickname}</Text>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: "row", alignItems: "baseline", gap: 2 }}>
+                <Text style={styles.roomsTopBarTitle}>Later</Text>
+                <Text style={[styles.roomsTopBarTitle, { color: "#FFD700" }]}>!</Text>
+                <Text style={[styles.roomsTopBarTitle, { color: "rgba(255,255,255,0.75)", fontSize: 14, fontWeight: "400" }]}> Chat</Text>
+              </View>
+              <Text style={styles.roomsTopBarSub}>Welcome, {pendingNickname} · Double-tap a room to join</Text>
             </View>
           </View>
           <Image
@@ -302,10 +301,9 @@ export default function WelcomeScreen() {
           />
         </ExpoLinearGradient>
 
-        {/* Search bar (decorative YM style) */}
-        <View style={styles.roomSearchBar}>
-          <Text style={styles.roomSearchIcon}>🔍</Text>
-          <Text style={styles.roomSearchPlaceholder}>Search rooms...</Text>
+        {/* Yahoo Chat-style info bar */}
+        <View style={styles.roomInfoBar}>
+          <Text style={styles.roomInfoBarText}>💬 Later! Public Rooms · The number next to each room shows how many chatters are inside. Tap to join.</Text>
         </View>
 
         <FlatList
@@ -621,6 +619,8 @@ const styles = StyleSheet.create({
   roomsBackBtn: { paddingRight: 8 },
   roomsBackBtnText: { color: YM.white, fontSize: 28, lineHeight: 32 },
 
+  roomInfoBar: { backgroundColor: "#F3E5F5", paddingHorizontal: 14, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "#E1BEE7" },
+  roomInfoBarText: { color: "#4A148C", fontSize: 11, lineHeight: 16 },
   roomSearchBar: { flexDirection: "row", alignItems: "center", backgroundColor: YM.white, borderBottomWidth: 1, borderBottomColor: YM.border, paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
   roomSearchIcon: { fontSize: 16 },
   roomSearchPlaceholder: { color: YM.midGray, fontSize: 14 },
@@ -628,13 +628,15 @@ const styles = StyleSheet.create({
   roomsList: { paddingBottom: 32 },
   roomSeparator: { height: 1, backgroundColor: YM.border, marginLeft: 72 },
 
-  // Room card — YM contact list style
-  roomCard: { flexDirection: "row", alignItems: "center", backgroundColor: YM.white, paddingHorizontal: 16, paddingVertical: 12, gap: 12 },
+  // Room card — Yahoo Chat folder style
+  roomCard: { flexDirection: "row", alignItems: "center", backgroundColor: YM.white, paddingHorizontal: 14, paddingVertical: 11, gap: 10 },
+  roomFolderIcon: { fontSize: 22, width: 30, textAlign: "center" },
   roomAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: YM.purple, alignItems: "center", justifyContent: "center" },
   roomAvatarText: { color: YM.white, fontSize: 18, fontWeight: "700" },
   roomCardContent: { flex: 1, gap: 2 },
-  roomCardName: { color: YM.text, fontWeight: "600", fontSize: 15 },
-  roomCardDesc: { color: YM.textLight, fontSize: 12 },
+  roomCardName: { color: YM.purple, fontWeight: "700", fontSize: 14 },
+  roomCardCount: { color: YM.darkGray, fontSize: 13, fontWeight: "400" },
+  roomCardDesc: { color: YM.textLight, fontSize: 11 },
   roomOnlineBadge: { flexDirection: "row", alignItems: "center", gap: 3 },
   onlineDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: YM.online },
   roomOnlineText: { color: YM.online, fontSize: 11, fontWeight: "600" },
