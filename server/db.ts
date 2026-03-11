@@ -3,7 +3,6 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
 import path from "path";
-import { fileURLToPath } from "url";
 import { InsertUser, users, rooms, inviteTokens, messages, Room, InviteToken, Message, chatUsers, chatFriends } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import crypto from "crypto";
@@ -18,9 +17,7 @@ export async function runMigrations(): Promise<void> {
   try {
     const client = postgres(process.env.DATABASE_URL, { max: 1 });
     const db = drizzle(client);
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = path.dirname(__filename);
-    const migrationsFolder = path.resolve(__dirname, "../../drizzle/migrations");
+    const migrationsFolder = path.resolve(process.cwd(), "drizzle/migrations");
     await migrate(db, { migrationsFolder });
     await client.end();
     console.log("[Database] Migrations completed successfully");
