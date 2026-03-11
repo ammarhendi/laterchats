@@ -18,7 +18,7 @@ import { crossInfo, crossConfirm } from "@/lib/cross-alert";
 import { trpc } from "@/lib/trpc";
 import { useChat } from "@/lib/chat-context";
 import { usePrivateCall } from "@/lib/use-private-call";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { ScrollView } from "react-native";
 
@@ -67,6 +67,7 @@ export default function FriendsScreen() {
     unreadPMs,
     markPMRead,
     ensureSocket,
+    socket,
   } = useChat();
 
   const {
@@ -121,8 +122,27 @@ export default function FriendsScreen() {
 
   const { data: friends, refetch, isLoading } = trpc.friends.list.useQuery(
     { username },
-    { enabled: !!username, refetchInterval: 15000 }
+    { enabled: !!username, refetchInterval: 5000 }
   );
+
+  // Refetch immediately every time the Friends screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      refetch();
+    }, [refetch])
+  );
+
+  // Real-time online status: refetch when a friend's status changes or room updates fire
+  useEffect(() => {
+    if (!socket) return;
+    const handleRefetch = () => { refetch(); };
+    socket.on("friend_status_changed", handleRefetch);
+    socket.on("users_updated", handleRefetch);
+    return () => {
+      socket.off("friend_status_changed", handleRefetch);
+      socket.off("users_updated", handleRefetch);
+    };
+  }, [socket, refetch]);
 
   const sendRequestMutation = trpc.friends.sendRequest.useMutation();
   const respondMutation = trpc.friends.respond.useMutation();

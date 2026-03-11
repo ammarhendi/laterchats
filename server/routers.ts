@@ -4,7 +4,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import * as db from "./db";
-import { getActiveUserCount } from "./socket";
+import { getActiveUserCount, getActiveUserByNickname } from "./socket";
 
 const FALLBACK_ROOMS = [
   { id: 1, name: "Now", description: "Pull up a chair and have a chat, mate!", isActive: true, createdAt: new Date() },
@@ -198,7 +198,12 @@ export const appRouter = router({
     list: publicProcedure
       .input(z.object({ username: z.string() }))
       .query(async ({ input }) => {
-        return db.getFriends(input.username);
+        const friends = await db.getFriends(input.username);
+        // Enrich each friend with live online status from the active socket users map
+        return friends.map((f) => ({
+          ...f,
+          isOnline: !!getActiveUserByNickname(f.username),
+        }));
       }),
     sendRequest: publicProcedure
       .input(z.object({ requesterUsername: z.string(), recipientUsername: z.string() }))

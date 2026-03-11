@@ -272,6 +272,20 @@ export function initSocketServer(httpServer: HttpServer) {
         // Also send a fresh list directly to the new joiner in case they missed the broadcast
         socket.emit("users_updated", freshRoomUsers);
 
+        // Notify friends that this user came online
+        try {
+          const { getFriends } = await import("./db");
+          const friendList = await getFriends(nickname);
+          for (const friend of friendList) {
+            if (friend.status === "accepted") {
+              const friendSocket = getActiveUserByNickname(friend.username);
+              if (friendSocket) {
+                io.to(friendSocket.socketId).emit("friend_status_changed", { nickname, isOnline: true });
+              }
+            }
+          }
+        } catch {}
+
         console.log(`[Socket] ${nickname} (${role}) joined room ${roomId}`);
       } catch (err) {
         console.error("[Socket] join_room error:", err);
@@ -936,6 +950,23 @@ export function initSocketServer(httpServer: HttpServer) {
         io.to(`room_${user.roomId}`).emit("system_message", systemMsg);
         io.to(`room_${user.roomId}`).emit("users_updated", getRoomUsers(user.roomId));
         io.to(`room_${user.roomId}`).emit("peer_disconnected", { nickname: user.nickname });
+
+        // Notify friends that this user went offline (async IIFE - best effort)
+        const offlineNickname = user.nickname;
+        (async () => {
+          try {
+            const { getFriends } = await import("./db");
+            const friendList = await getFriends(offlineNickname);
+            for (const friend of friendList) {
+              if (friend.status === "accepted") {
+                const friendSocket = getActiveUserByNickname(friend.username);
+                if (friendSocket) {
+                  io.to(friendSocket.socketId).emit("friend_status_changed", { nickname: offlineNickname, isOnline: false });
+                }
+              }
+            }
+          } catch {}
+        })();
 
         console.log(`[Socket] ${user.nickname} left room ${user.roomId}`);
       }
