@@ -377,7 +377,7 @@ export default function WelcomeScreen() {
                 {/* YM-style grouped input */}
                 <View style={styles.ymInputGroup}>
                   <View style={styles.ymInputRow}>
-                    <Text style={styles.ymInputLabel}>Yahoo! ID</Text>
+                    <Text style={styles.ymInputLabel}>Later! ID</Text>
                     <TextInput
                       style={styles.ymInputField}
                       value={loginUsername}
