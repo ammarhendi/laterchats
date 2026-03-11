@@ -138,6 +138,41 @@ async function startServer() {
     }
   });
 
+  // ── PM Media upload endpoint (photos/videos for private chat) ──────────────
+  const mediaUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 50 * 1024 * 1024 }, // 50MB max for videos
+    fileFilter: (_req, file, cb) => {
+      if (file.mimetype.startsWith("image/") || file.mimetype.startsWith("video/")) cb(null, true);
+      else cb(new Error("Only image and video files are allowed"));
+    },
+  });
+
+  app.post("/api/upload-media", mediaUpload.single("file"), async (req, res) => {
+    try {
+      const sender = req.body?.sender;
+      const isSecret = req.body?.isSecret === "true";
+      if (!sender) {
+        res.json({ success: false, error: "Sender required" });
+        return;
+      }
+      if (!req.file) {
+        res.json({ success: false, error: "No file uploaded" });
+        return;
+      }
+      const ext = req.file.mimetype.split("/")[1]?.replace("quicktime", "mov") || "jpg";
+      const mediaType = req.file.mimetype.startsWith("video/") ? "video" : "image";
+      // Secret media uses a temp key prefix; in production these could be auto-deleted
+      const prefix = isSecret ? "secret-media" : "pm-media";
+      const key = `${prefix}/${sender.toLowerCase()}_${Date.now()}.${ext}`;
+      const { url } = await storagePut(key, req.file.buffer, req.file.mimetype);
+      res.json({ success: true, url, mediaType });
+    } catch (err) {
+      console.error("[api/upload-media] error:", err);
+      res.json({ success: false, error: (err as Error).message });
+    }
+  });
+
   // Simple direct clear-room endpoint - no tRPC, no socket, just DB + broadcast
   app.post("/api/clear-room", async (req, res) => {
     try {

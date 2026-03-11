@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   View,
@@ -19,6 +19,7 @@ import { router } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { getApiBaseUrl } from "@/constants/oauth";
+import { VideoView, useVideoPlayer } from "expo-video";
 
 const YM_PURPLE = "#7B1FA2";
 const YM_PURPLE_DARK = "#4A0072";
@@ -34,6 +35,12 @@ export default function ProfileScreen() {
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [profileVideoUrl, setProfileVideoUrl] = useState<string | null>(null);
+  const [uploadingVideo, setUploadingVideo] = useState(false);
+  const videoPlayer = useVideoPlayer(profileVideoUrl || "", (p) => {
+    p.loop = true;
+    if (profileVideoUrl) p.play();
+  });
 
   // Change password state
   const [showChangePwd, setShowChangePwd] = useState(false);
@@ -67,8 +74,91 @@ export default function ProfileScreen() {
         // Keep AsyncStorage in sync with DB
         AsyncStorage.setItem(`later_avatar_${username.toLowerCase()}`, profile.avatarUrl);
       }
+      if ((profile as any).profileVideoUrl) {
+        setProfileVideoUrl((profile as any).profileVideoUrl);
+      }
     }
   }, [profile]);
+
+  const handlePickProfileVideo = async () => {
+    if (!username) return;
+    Alert.alert(
+      "Profile Video",
+      "Choose a short video (max 10 seconds) from your gallery or record a new one.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Pick from Gallery",
+          onPress: async () => {
+            const result = await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+              allowsEditing: true,
+              videoMaxDuration: 10,
+              quality: ImagePicker.UIImagePickerControllerQualityType.Medium,
+            });
+            if (!result.canceled && result.assets[0]) {
+              await uploadProfileVideo(result.assets[0].uri, result.assets[0].mimeType || "video/mp4");
+            }
+          },
+        },
+        {
+          text: "Record Video",
+          onPress: async () => {
+            const { status } = await ImagePicker.requestCameraPermissionsAsync();
+            if (status !== "granted") {
+              Alert.alert("Permission Required", "Camera permission is required to record video.");
+              return;
+            }
+            const result = await ImagePicker.launchCameraAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+              allowsEditing: true,
+              videoMaxDuration: 10,
+              quality: ImagePicker.UIImagePickerControllerQualityType.Medium,
+            });
+            if (!result.canceled && result.assets[0]) {
+              await uploadProfileVideo(result.assets[0].uri, result.assets[0].mimeType || "video/mp4");
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const uploadProfileVideo = async (uri: string, mimeType: string) => {
+    setUploadingVideo(true);
+    try {
+      const apiBase = getApiBaseUrl();
+      const ext = mimeType.split("/")[1]?.replace("quicktime", "mov") || "mp4";
+      const formData = new FormData();
+      formData.append("file", {
+        uri,
+        name: `profile_video_${username}_${Date.now()}.${ext}`,
+        type: mimeType,
+      } as any);
+      formData.append("sender", username);
+      formData.append("isSecret", "false");
+
+      const response = await fetch(`${apiBase}/api/upload-media`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await response.json();
+      if (data.success && data.url) {
+        setProfileVideoUrl(data.url);
+        await updateProfileMutation.mutateAsync({
+          username,
+          profileVideoUrl: data.url,
+        } as any);
+        refetch();
+        Alert.alert("Success", "Profile video updated! It will loop on your profile.");
+      } else {
+        Alert.alert("Upload Failed", data.error || "Could not upload video.");
+      }
+    } catch (err) {
+      Alert.alert("Upload Failed", "Could not upload video. Please try again.");
+    }
+    setUploadingVideo(false);
+  };
 
   const handlePickImage = async () => {
     if (!username) return;
@@ -247,6 +337,35 @@ export default function ProfileScreen() {
           <Text style={styles.headerStatus}>
             {statusMessage || "No status set"}
           </Text>
+
+          {/* Profile Video */}
+          <View style={styles.profileVideoSection}>
+            {profileVideoUrl ? (
+              <View style={styles.profileVideoWrap}>
+                <VideoView
+                  player={videoPlayer}
+                  style={styles.profileVideo}
+                  contentFit="cover"
+                  allowsFullscreen
+                />
+                <TouchableOpacity style={styles.profileVideoEditBtn} onPress={handlePickProfileVideo} disabled={uploadingVideo}>
+                  <Text style={styles.profileVideoEditText}>{uploadingVideo ? "Uploading..." : "✏️ Change Video"}</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity style={styles.profileVideoAddBtn} onPress={handlePickProfileVideo} disabled={uploadingVideo}>
+                {uploadingVideo ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <>
+                    <Text style={styles.profileVideoAddIcon}>🎥</Text>
+                    <Text style={styles.profileVideoAddText}>Add Profile Video</Text>
+                    <Text style={styles.profileVideoAddSub}>Max 10 seconds</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
+          </View>
         </LinearGradient>
 
         {/* Profile form */}
@@ -678,5 +797,58 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "700",
     fontSize: 15,
+  },
+  profileVideoSection: {
+    marginTop: 12,
+    alignItems: "center",
+    width: "100%",
+  },
+  profileVideoWrap: {
+    alignItems: "center",
+    gap: 8,
+  },
+  profileVideo: {
+    width: 200,
+    height: 120,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: YM_GOLD,
+  },
+  profileVideoEditBtn: {
+    backgroundColor: "rgba(255,255,255,0.2)",
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.4)",
+  },
+  profileVideoEditText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  profileVideoAddBtn: {
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.15)",
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.4)",
+    borderStyle: "dashed",
+    borderRadius: 12,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    gap: 4,
+    minWidth: 160,
+  },
+  profileVideoAddIcon: {
+    fontSize: 28,
+  },
+  profileVideoAddText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 13,
+  },
+  profileVideoAddSub: {
+    color: "rgba(255,255,255,0.7)",
+    fontSize: 11,
   },
 });

@@ -168,3 +168,6 @@
 - [x] Secret Mode for private chats: disappearing messages with 5/10/30/60s burn timer, animated fade-out
 - [ ] Fix: Mod button and Chat Tools Admin Panel both route to full /admin screen (unify)
 - [ ] Offline PM delivery frontend: show notification badge on login for unread offline PMs
+- [x] Photo/video sharing in private chat (pick from gallery or camera, upload to server, display inline)
+- [ ] Secret Camera in Secret Mode: take photo/video together, auto-burns after viewing, never stored on server
+- [x] Profile video support: pick or record a short video (max 10 seconds) as profile media, display as looping video on profile
