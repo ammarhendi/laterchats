@@ -509,17 +509,6 @@ export default function WelcomeScreen() {
             <Text style={styles.ymShareBtnText}>📤  Invite Friends to Later!</Text>
           </TouchableOpacity>
 
-          {/* Room preview pills */}
-          <View style={styles.ymRoomPreview}>
-            <Text style={styles.ymRoomPreviewTitle}>10 Chat Rooms Available</Text>
-            <View style={styles.ymRoomPills}>
-              {FALLBACK_ROOMS.map((r) => (
-                <View key={r.id} style={styles.ymRoomPill}>
-                  <Text style={styles.ymRoomPillText}>{r.name}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
 
         </ScrollView>
       </KeyboardAvoidingView>
