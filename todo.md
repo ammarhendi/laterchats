@@ -192,3 +192,4 @@
 - [x] Fix tab bar label clipping: "Chat Rooms", "Friends", "Profile" text cut off by tab bar background color
 - [x] Fix dev server connection issue: test link not loading properly
 - [x] Rebuild PM as proper full-screen messenger-style conversation window (separate screen per contact, like a messenger app)
+- [x] Fix white screen bug when clicking into a chat room (web test link)

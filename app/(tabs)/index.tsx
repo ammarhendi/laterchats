@@ -341,6 +341,8 @@ export default function WelcomeScreen() {
 
       </ScreenContainer>
     );
+  }
+
   // ── Auth Screen ──────────────────────────────────────────────────────────────────────────────────────────
   return (
     <ScreenContainer containerClassName="bg-white" safeAreaClassName="bg-white">
@@ -578,7 +580,6 @@ export default function WelcomeScreen() {
 
       </ScreenContainer>
     );
-  }
 }
 
 const styles = StyleSheet.create({
