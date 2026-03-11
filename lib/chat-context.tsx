@@ -371,10 +371,12 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     // Load cleared-at timestamp FIRST, then create socket.
     // This prevents the race condition where message_history arrives before
     // the cleared timestamp is restored, causing cleared messages to reappear.
+    console.log('[ChatContext] Startup useEffect running, setupSocketListeners:', typeof setupSocketListeners);
     (async () => {
       try {
         // Step 1: Restore nickname first (needed for per-user cleared_at key)
         const n = await AsyncStorage.getItem("later_nickname");
+        console.log('[ChatContext] AsyncStorage nickname:', n);
 
         // Step 2: Restore cleared-at timestamp (per-user key)
         if (n) {
@@ -386,6 +388,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           nicknameRef.current = n;
           // Auto-connect socket so user appears online immediately on app open
           const apiBase = getApiBaseUrl();
+          console.log('[ChatContext] Creating socket to:', apiBase, 'socketRef.current?.connected:', socketRef.current?.connected);
           if (!socketRef.current?.connected) {
             const s = io(apiBase, {
               path: "/api/socket",
@@ -401,6 +404,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
             s.on("reconnect", () => {
               s.emit("register_presence", { nickname: nicknameRef.current || n });
             });
+            console.log('[ChatContext] Socket created, id:', s.id, 'connected:', s.connected);
             setupSocketListeners(s);
             socketRef.current = s;
             setSocket(s);
