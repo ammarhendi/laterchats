@@ -1,1 +1,0 @@
-ALTER TABLE `chat_users` ADD `profileVideoUrl` varchar(512);

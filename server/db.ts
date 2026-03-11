@@ -1,10 +1,34 @@
 import { eq, or, and } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
+import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
+import path from "path";
+import { fileURLToPath } from "url";
 import { InsertUser, users, rooms, inviteTokens, messages, Room, InviteToken, Message, chatUsers, chatFriends } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
+
+// Auto-run migrations on startup
+export async function runMigrations(): Promise<void> {
+  if (!process.env.DATABASE_URL) {
+    console.warn("[Database] DATABASE_URL not set, skipping migrations");
+    return;
+  }
+  try {
+    const client = postgres(process.env.DATABASE_URL, { max: 1 });
+    const db = drizzle(client);
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    const migrationsFolder = path.resolve(__dirname, "../../drizzle/migrations");
+    await migrate(db, { migrationsFolder });
+    await client.end();
+    console.log("[Database] Migrations completed successfully");
+  } catch (error) {
+    console.error("[Database] Migration failed:", error);
+    throw error;
+  }
+}
 
 // Reserved usernames — cannot be registered by anyone
 const RESERVED_USERNAMES = ["ammar", "Ammar", "AMMAR", "later", "Later", "LATER", "admin", "system", "moderator"];
