@@ -56,6 +56,10 @@ export function getIo(): SocketIOServer | null {
   return ioInstance;
 }
 
+export function getActiveUserCount(roomId: number): number {
+  return Array.from(activeUsers.values()).filter((u) => u.roomId === roomId).length;
+}
+
 export function initSocketServer(httpServer: HttpServer) {
   const io = new SocketIOServer(httpServer, {
     cors: {
@@ -427,6 +431,87 @@ export function initSocketServer(httpServer: HttpServer) {
       socket.emit("peers_list", { peers });
     });
 
+    // ── Private voice call signaling ─────────────────────────────────────────
+    socket.on("private_call_request", ({ targetNickname }: { targetNickname: string }) => {
+      const caller = activeUsers.get(socket.id);
+      if (!caller) return;
+      const target = Array.from(activeUsers.values()).find(
+        (u) => u.nickname === targetNickname && u.roomId === caller.roomId
+      );
+      if (target) {
+        io.to(target.socketId).emit("private_call_incoming", { fromNickname: caller.nickname });
+      } else {
+        socket.emit("private_call_rejected", { fromNickname: targetNickname, reason: "User not found" });
+      }
+    });
+
+    socket.on("private_call_accept", ({ targetNickname }: { targetNickname: string }) => {
+      const accepter = activeUsers.get(socket.id);
+      if (!accepter) return;
+      const target = Array.from(activeUsers.values()).find(
+        (u) => u.nickname === targetNickname && u.roomId === accepter.roomId
+      );
+      if (target) {
+        io.to(target.socketId).emit("private_call_accepted", { fromNickname: accepter.nickname });
+      }
+    });
+
+    socket.on("private_call_reject", ({ targetNickname }: { targetNickname: string }) => {
+      const rejecter = activeUsers.get(socket.id);
+      if (!rejecter) return;
+      const target = Array.from(activeUsers.values()).find(
+        (u) => u.nickname === targetNickname && u.roomId === rejecter.roomId
+      );
+      if (target) {
+        io.to(target.socketId).emit("private_call_rejected", { fromNickname: rejecter.nickname, reason: "Call declined" });
+      }
+    });
+
+    socket.on("private_call_end", ({ targetNickname }: { targetNickname: string }) => {
+      const ender = activeUsers.get(socket.id);
+      if (!ender) return;
+      const target = Array.from(activeUsers.values()).find(
+        (u) => u.nickname === targetNickname && u.roomId === ender.roomId
+      );
+      if (target) {
+        io.to(target.socketId).emit("private_call_ended", { fromNickname: ender.nickname });
+      }
+    });
+
+    // Private WebRTC signaling (separate from room voice)
+    socket.on("private_webrtc_offer", ({ targetNickname, offer }: { targetNickname: string; offer: RTCSessionDescriptionInit }) => {
+      const user = activeUsers.get(socket.id);
+      if (!user) return;
+      const target = Array.from(activeUsers.values()).find(
+        (u) => u.nickname === targetNickname && u.roomId === user.roomId
+      );
+      if (target) {
+        io.to(target.socketId).emit("private_webrtc_offer", { fromNickname: user.nickname, offer });
+      }
+    });
+
+    socket.on("private_webrtc_answer", ({ targetNickname, answer }: { targetNickname: string; answer: RTCSessionDescriptionInit }) => {
+      const user = activeUsers.get(socket.id);
+      if (!user) return;
+      const target = Array.from(activeUsers.values()).find(
+        (u) => u.nickname === targetNickname && u.roomId === user.roomId
+      );
+      if (target) {
+        io.to(target.socketId).emit("private_webrtc_answer", { fromNickname: user.nickname, answer });
+      }
+    });
+
+    socket.on("private_webrtc_ice", ({ targetNickname, candidate }: { targetNickname: string; candidate: RTCIceCandidateInit }) => {
+      const user = activeUsers.get(socket.id);
+      if (!user) return;
+      const target = Array.from(activeUsers.values()).find(
+        (u) => u.nickname === targetNickname && u.roomId === user.roomId
+      );
+      if (target) {
+        io.to(target.socketId).emit("private_webrtc_ice", { fromNickname: user.nickname, candidate });
+      }
+    });
+
     // ── Admin: kick user ──────────────────────────────────────────────────────
     socket.on("admin_kick", ({ targetNickname }: { targetNickname: string }) => {
       const admin = activeUsers.get(socket.id);
@@ -642,35 +727,33 @@ export function initSocketServer(httpServer: HttpServer) {
     });
 
     // ── Admin: clear room messages ────────────────────────────────────────────
-    socket.on("clear_room", async (ack?: (result: { success: boolean; message?: string }) => void) => {
+    socket.on("clear_room", async () => {
       const user = activeUsers.get(socket.id);
       console.log(`[Socket] clear_room received from ${socket.id}, user: ${user?.nickname}, role: ${user?.role}`);
       if (!user) {
-        if (ack) ack({ success: false, message: "Not in room" });
+        socket.emit("error", { message: "Not in room. Please rejoin." });
         return;
       }
       if (user.role !== "super_admin") {
-        if (ack) ack({ success: false, message: "Only Super Admin can clear the room" });
+        socket.emit("error", { message: "Only Super Admin can clear the room" });
         return;
       }
-
       try {
         const db = await getDb();
         if (db) {
           await db.delete(messages).where(eq(messages.roomId, user.roomId));
           console.log(`[Socket] Deleted messages for room ${user.roomId}`);
         } else {
-          console.warn("[Socket] No DB connection for clear_room");
+          console.warn("[Socket] No DB connection for clear_room - clearing in memory only");
         }
-        // Broadcast room_cleared to ALL users in the room (including sender)
+        // Broadcast room_cleared to ALL users in the room socket group
         io.to(`room_${user.roomId}`).emit("room_cleared");
-        // Also emit directly to sender in case they're not in the room socket group
+        // Also emit directly to sender as a safety net
         socket.emit("room_cleared");
         console.log(`[Socket] Room ${user.roomId} cleared by ${user.nickname}`);
-        if (ack) ack({ success: true });
       } catch (err) {
         console.error("[Socket] clear_room error:", err);
-        if (ack) ack({ success: false, message: "Failed to clear chat: " + (err as Error).message });
+        socket.emit("error", { message: "Failed to clear chat: " + (err as Error).message });
       }
     });
 

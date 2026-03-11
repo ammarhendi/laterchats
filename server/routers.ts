@@ -4,6 +4,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import * as db from "./db";
+import { getActiveUserCount } from "./socket";
 
 const FALLBACK_ROOMS = [
   { id: 1, name: "Now", description: "Pull up a chair and have a chat, mate!", isActive: true, createdAt: new Date() },
@@ -89,6 +90,17 @@ export const appRouter = router({
       .input(z.object({ roomId: z.number() }))
       .query(async ({ input }) => {
         return db.getRecentMessages(input.roomId, 50);
+      }),
+
+    getRoomUserCount: publicProcedure
+      .input(z.object({ roomId: z.number() }))
+      .query(({ input }) => {
+        try {
+          const count = getActiveUserCount(input.roomId);
+          return { count };
+        } catch {
+          return { count: 0 };
+        }
       }),
 
     clearRoom: publicProcedure

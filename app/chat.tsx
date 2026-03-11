@@ -17,6 +17,7 @@ import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useChat, ChatMessage, ChatUser, UserRole } from "@/lib/chat-context";
 import { useVoiceChat } from "@/lib/use-voice-chat";
+import { usePrivateCall } from "@/lib/use-private-call";
 import { trpc } from "@/lib/trpc";
 import * as Haptics from "expo-haptics";
 
@@ -144,14 +145,17 @@ function MessageItem({ msg, myNickname }: { msg: ChatMessage; myNickname: string
   const isSuperAdminMsg = isSuperAdminName(msg.senderNickname);
   return (
     <View style={styles.msgRow}>
-      <Text style={styles.msgText}>
-        {isSuperAdminMsg && <Text style={{ color: "#FFD700" }}>👑 </Text>}
-        <Text style={[styles.msgNickname, { color: nicknameColor }]}>
-          {msg.senderNickname}
+      <View style={styles.msgRowInner}>
+        <Text style={styles.msgText}>
+          {isSuperAdminMsg && <Text style={{ color: "#FFD700" }}>👑 </Text>}
+          <Text style={[styles.msgNickname, { color: nicknameColor }]}>
+            {msg.senderNickname}
+          </Text>
+          <Text style={styles.msgSays}>: </Text>
+          <RichText text={msg.content} baseStyle={styles.msgContent} />
         </Text>
-        <Text style={styles.msgSays}>: </Text>
-        <Text style={styles.msgContent}>{msg.content}</Text>
-      </Text>
+        <Text style={styles.msgTimestamp}>{formatTime(msg.createdAt)}</Text>
+      </View>
     </View>
   );
 }
@@ -212,6 +216,16 @@ export default function ChatScreen() {
   } = useChat();
 
   const { isVoiceEnabled, startVoice, stopVoice, error: voiceError } = useVoiceChat();
+  const {
+    callState,
+    callPartner,
+    incomingFrom,
+    callDuration,
+    startCall,
+    acceptCall,
+    rejectCall,
+    endCall,
+  } = usePrivateCall();
 
   const [inputText, setInputText] = useState("");
   const [isBold, setIsBold] = useState(false);
@@ -257,24 +271,19 @@ export default function ChatScreen() {
   }, [messages.length]);
 
   const handleSend = useCallback(() => {
-    let text = inputText.trim();
+    const text = inputText.trim();
     if (!text) return;
     if (isTextMuted) {
       Alert.alert("Muted", "You have been muted and cannot send messages.");
       return;
     }
-    // Apply formatting without showing markers in input box
-    if (isBold && isItalic) text = `***${text}***`;
-    else if (isBold) text = `**${text}**`;
-    else if (isItalic) text = `_${text}_`;
+    // Send plain text exactly as typed — no formatting markers
     sendMessage(text);
     setInputText("");
-    setIsBold(false);
-    setIsItalic(false);
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-  }, [inputText, sendMessage, isTextMuted, isBold, isItalic]);
+  }, [inputText, sendMessage, isTextMuted]);
 
   const handleEmojiSelect = (emoji: string) => {
     setInputText((prev) => prev + emoji);
@@ -570,26 +579,16 @@ export default function ChatScreen() {
 
         {/* Toolbar */}
         <View style={styles.toolbar}>
-          <TouchableOpacity
-            style={[styles.toolbarBtn, isBold && styles.toolbarBtnActive]}
-            onPress={() => setIsBold((v) => !v)}
-          >
-            <Text style={[styles.toolbarBtnText, { fontWeight: "bold" }, isBold && { color: "#FFD700" }]}>B</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.toolbarBtn, isItalic && styles.toolbarBtnActive]}
-            onPress={() => setIsItalic((v) => !v)}
-          >
-            <Text style={[styles.toolbarBtnText, { fontStyle: "italic" }, isItalic && { color: "#FFD700" }]}>I</Text>
-          </TouchableOpacity>
           <TouchableOpacity style={styles.toolbarBtn} onPress={() => setShowEmoji(!showEmoji)}>
             <Text style={styles.toolbarBtnText}>😊</Text>
           </TouchableOpacity>
-          <Text style={styles.toolbarSep}>|</Text>
           {isMod && (
-            <TouchableOpacity style={styles.toolbarBtn} onPress={() => router.push("/admin" as any)}>
-              <Text style={styles.toolbarBtnText}>⚙️</Text>
-            </TouchableOpacity>
+            <>
+              <Text style={styles.toolbarSep}>|</Text>
+              <TouchableOpacity style={styles.toolbarBtn} onPress={() => router.push("/admin" as any)}>
+                <Text style={styles.toolbarBtnText}>⚙️</Text>
+              </TouchableOpacity>
+            </>
           )}
         </View>
 
@@ -675,6 +674,15 @@ export default function ChatScreen() {
             {/* Always available */}
             <TouchableOpacity style={styles.modalOption} onPress={handlePM}>
               <Text style={styles.modalOptionText}>💬 Send Private Message</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.modalOption}
+              onPress={() => {
+                setShowUserModal(false);
+                if (selectedUser) startCall(selectedUser.nickname);
+              }}
+            >
+              <Text style={[styles.modalOptionText, { color: "#00CC88" }]}>📞 Private Voice Call</Text>
             </TouchableOpacity>
             {selectedUser?.role !== "super_admin" && (
               <TouchableOpacity style={styles.modalOption} onPress={handleIgnore}>
@@ -769,9 +777,6 @@ export default function ChatScreen() {
               👑 Super Admin Panel
             </Text>
             <View style={styles.modalDivider} />
-            <TouchableOpacity style={styles.modalOption} onPress={handleClearChat}>
-              <Text style={[styles.modalOptionText, { color: "#FF4444" }]}>🗑️ Clear Chat Room</Text>
-            </TouchableOpacity>
             <TouchableOpacity style={styles.modalOption} onPress={handleShowBanned}>
               <Text style={styles.modalOptionText}>🚫 View Banned Users</Text>
             </TouchableOpacity>
@@ -877,6 +882,44 @@ export default function ChatScreen() {
           </View>
         </View>
       </Modal>
+      {/* Incoming Call Overlay */}
+      {callState === "incoming" && incomingFrom && (
+        <View style={styles.callOverlay}>
+          <View style={styles.callBox}>
+            <Text style={styles.callIcon}>📞</Text>
+            <Text style={styles.callTitle}>Incoming Voice Call</Text>
+            <Text style={styles.callFrom}>{incomingFrom}</Text>
+            <View style={styles.callBtns}>
+              <TouchableOpacity style={styles.callRejectBtn} onPress={rejectCall}>
+                <Text style={styles.callRejectText}>🔴 Decline</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.callAcceptBtn} onPress={acceptCall}>
+                <Text style={styles.callAcceptText}>🟢 Accept</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* Outgoing Call Banner */}
+      {callState === "calling" && callPartner && (
+        <View style={styles.callBanner}>
+          <Text style={styles.callBannerText}>📞 Calling {callPartner}...</Text>
+          <TouchableOpacity style={styles.callEndBannerBtn} onPress={endCall}>
+            <Text style={styles.callEndBannerText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Active Call Banner */}
+      {callState === "connected" && callPartner && (
+        <View style={[styles.callBanner, { backgroundColor: "#004400" }]}>
+          <Text style={styles.callBannerText}>🟢 In call with {callPartner} • {callDuration}</Text>
+          <TouchableOpacity style={styles.callEndBannerBtn} onPress={endCall}>
+            <Text style={styles.callEndBannerText}>End</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </ScreenContainer>
   );
 }
@@ -1507,5 +1550,115 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 10,
     fontWeight: "bold" as const,
+  },
+  // Private voice call styles
+  callOverlay: {
+    position: "absolute" as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.75)",
+    justifyContent: "center" as const,
+    alignItems: "center" as const,
+    zIndex: 999,
+  },
+  callBox: {
+    backgroundColor: "#1a0a2e",
+    borderRadius: 20,
+    padding: 28,
+    alignItems: "center" as const,
+    width: 280,
+    borderWidth: 2,
+    borderColor: "#7B0099",
+  },
+  callIcon: {
+    fontSize: 48,
+    marginBottom: 12,
+  },
+  callTitle: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "bold" as const,
+    marginBottom: 6,
+  },
+  callFrom: {
+    color: "#FFD700",
+    fontSize: 22,
+    fontWeight: "bold" as const,
+    marginBottom: 24,
+  },
+  callBtns: {
+    flexDirection: "row" as const,
+    gap: 16,
+  },
+  callRejectBtn: {
+    backgroundColor: "#CC0000",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 30,
+  },
+  callRejectText: {
+    color: "#fff",
+    fontWeight: "bold" as const,
+    fontSize: 15,
+  },
+  callAcceptBtn: {
+    backgroundColor: "#006600",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 30,
+  },
+  callAcceptText: {
+    color: "#fff",
+    fontWeight: "bold" as const,
+    fontSize: 15,
+  },
+  callBanner: {
+    position: "absolute" as const,
+    top: 60,
+    left: 10,
+    right: 10,
+    backgroundColor: "#330055",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "space-between" as const,
+    zIndex: 100,
+    borderWidth: 1,
+    borderColor: "#7B0099",
+  },
+  callBannerText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "600" as const,
+    flex: 1,
+  },
+  callEndBannerBtn: {
+    backgroundColor: "#CC0000",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginLeft: 10,
+  },
+  callEndBannerText: {
+    color: "#fff",
+    fontWeight: "bold" as const,
+    fontSize: 12,
+  },
+  msgRowInner: {
+    flex: 1,
+    flexDirection: "row" as const,
+    alignItems: "flex-end" as const,
+    flexWrap: "wrap" as const,
+    gap: 4,
+  },
+  msgTimestamp: {
+    color: "rgba(255,255,255,0.35)",
+    fontSize: 10,
+    marginLeft: 4,
+    flexShrink: 0,
   },
 });

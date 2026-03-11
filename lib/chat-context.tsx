@@ -371,14 +371,10 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     }
     // Optimistically clear local messages immediately
     setMessages([]);
-    // Use socket clear_room — server deletes from DB and broadcasts room_cleared to ALL users in the room
-    console.log("[Chat] Emitting clear_room, socket connected:", sock.connected, "socket id:", sock.id);
-    sock.emit("clear_room", (result: { success: boolean; message?: string }) => {
-      console.log("[Chat] clear_room ack result:", result);
-      if (!result?.success) {
-        Alert.alert("Clear Chat Failed", result?.message || "Failed to clear chat. You may need to re-enter the room.");
-      }
-    });
+    // Emit clear_room WITHOUT ack callback — ack callbacks are unreliable on mobile.
+    // The server will broadcast room_cleared to all users in the room (including sender),
+    // which triggers setMessages([]) for everyone. The optimistic clear above handles the sender.
+    sock.emit("clear_room");
   }, []);
 
   // Admin actions

@@ -44,6 +44,30 @@ const FALLBACK_ROOMS: { id: number; name: string; description: string | null }[]
   { id: 10, name: "Random", description: "Totally random conversations." },
 ];
 
+function RoomCard({ room, onPress }: { room: { id: number; name: string; description: string | null }; onPress: () => void }) {
+  const { data: countData } = trpc.chat.getRoomUserCount.useQuery(
+    { roomId: room.id },
+    { refetchInterval: 10000, retry: 1 }
+  );
+  const count = countData?.count ?? 0;
+  return (
+    <TouchableOpacity style={styles.roomCard} onPress={onPress} activeOpacity={0.75}>
+      <View style={styles.roomCardContent}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <Text style={styles.roomCardName}>{room.name}</Text>
+          {count > 0 && (
+            <View style={styles.roomUserBadge}>
+              <Text style={styles.roomUserBadgeText}>{count} online</Text>
+            </View>
+          )}
+        </View>
+        <Text style={styles.roomCardDesc} numberOfLines={1}>{room.description}</Text>
+      </View>
+      <Text style={styles.roomCardArrow}>›</Text>
+    </TouchableOpacity>
+  );
+}
+
 const ROOM_ICONS: Record<string, string> = {
   "Now": "⚡",
   "Arab World": "🌍",
@@ -301,18 +325,10 @@ export default function WelcomeScreen() {
           keyExtractor={(item) => String(item.id)}
           contentContainerStyle={styles.roomsList}
           renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.roomCard}
+            <RoomCard
+              room={item}
               onPress={() => handleRoomSelect(item.id)}
-              activeOpacity={0.75}
-            >
-              <View style={styles.roomCardContent}>
-                <Text style={styles.roomCardName}>{item.name}</Text>
-                <Text style={styles.roomCardDesc} numberOfLines={1}>{item.description}</Text>
-              </View>
-              <Text style={styles.roomCardArrow}>›</Text>
-
-            </TouchableOpacity>
+            />
           )}
           ListHeaderComponent={
             roomsLoading ? (
@@ -618,6 +634,8 @@ const styles = StyleSheet.create({
   roomPreviewTitle: { color: "#FFD700", fontWeight: "bold", fontSize: 13, textAlign: "center" },
   roomPreviewGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "center" },
   roomPill: { backgroundColor: "#1a1a1a", borderWidth: 1, borderColor: "#7B0099", borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5 },
+  roomUserBadge: { backgroundColor: "#004400", borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2 },
+  roomUserBadgeText: { color: "#00FF88", fontSize: 11, fontWeight: "600" as const },
   roomPillText: { color: "#ccc", fontSize: 11 },
   // Room selection screen
   roomsHeader: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8, gap: 4 },
