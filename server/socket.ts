@@ -734,10 +734,7 @@ export function initSocketServer(httpServer: HttpServer) {
         socket.emit("error", { message: "Not in room. Please rejoin." });
         return;
       }
-      if (user.role !== "super_admin") {
-        socket.emit("error", { message: "Only Super Admin can clear the room" });
-        return;
-      }
+      // All users can clear chat (each user clears their own local view via room_cleared)
       try {
         const db = await getDb();
         if (db) {

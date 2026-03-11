@@ -128,6 +128,7 @@ export default function WelcomeScreen() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [pendingRoomId, setPendingRoomId] = useState<number | null>(null);
 
   const registerMutation = trpc.user.register.useMutation();
   const loginMutation = trpc.user.login.useMutation();
@@ -222,8 +223,10 @@ export default function WelcomeScreen() {
   };
 
   const handleRoomSelect = (selectedRoomId: number) => {
+    setPendingRoomId(selectedRoomId);
     joinRoom(pendingNickname, selectedRoomId);
-    router.replace("/chat" as any);
+    // Navigation happens in useEffect when roomId is set (after room_joined event)
+    // or after super admin auth completes
   };
 
   const handleAdminAuth = () => {
@@ -234,6 +237,8 @@ export default function WelcomeScreen() {
     setShowAdminAuth(false);
     setAdminPassword("");
     setAdminConfirmPassword("");
+    // Navigate to chat after super admin auth - roomId will be set by room_joined event
+    // The useEffect watching roomId will handle navigation
   };
 
   const handleSuperAdminJoin = () => {

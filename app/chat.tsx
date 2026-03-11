@@ -213,8 +213,8 @@ export default function ChatScreen() {
     unmuteUserText,
     requestBannedList,
     bannedList,
+    clearMessages,
   } = useChat();
-
   const { isVoiceEnabled, startVoice, stopVoice, error: voiceError } = useVoiceChat();
   const {
     callState,
@@ -581,6 +581,19 @@ export default function ChatScreen() {
         <View style={styles.toolbar}>
           <TouchableOpacity style={styles.toolbarBtn} onPress={() => setShowEmoji(!showEmoji)}>
             <Text style={styles.toolbarBtnText}>😊</Text>
+          </TouchableOpacity>
+          <Text style={styles.toolbarSep}>|</Text>
+          {/* Local clear — clears only this user's screen */}
+          <TouchableOpacity
+            style={styles.localClearBtn}
+            onPress={() =>
+              Alert.alert("Clear Screen", "Clear messages from your screen only?", [
+                { text: "Cancel", style: "cancel" },
+                { text: "Clear", style: "destructive", onPress: () => clearMessages() },
+              ])
+            }
+          >
+            <Text style={styles.localClearBtnText}>Clear</Text>
           </TouchableOpacity>
           {isMod && (
             <>
@@ -1683,5 +1696,18 @@ const styles = StyleSheet.create({
     fontSize: 10,
     marginLeft: 4,
     flexShrink: 0,
+  },
+  localClearBtn: {
+    backgroundColor: "#EDE7F6",
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: "#CE93D8",
+  },
+  localClearBtnText: {
+    color: "#7B1FA2",
+    fontSize: 12,
+    fontWeight: "600" as const,
   },
 });
