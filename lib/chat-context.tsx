@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from "react";
+import { createContext, useContext, useEffect, useState, useRef, useCallback } from "react";
 import { io, Socket } from "socket.io-client";
 import { getApiBaseUrl } from "@/constants/oauth";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -99,50 +99,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   // Persist the "cleared at" timestamp so messages cleared by the user don't come back after sign-out/in
   const clearedAtRef = useRef<number>(0);
 
-  useEffect(() => {
-    // IMPORTANT: Load cleared-at timestamp FIRST, then create socket.
-    // This prevents the race condition where message_history arrives before
-    // the cleared timestamp is restored, causing cleared messages to reappear.
-    (async () => {
-      // Step 1: Restore nickname first (needed for per-user cleared_at key)
-      const n = await AsyncStorage.getItem("later_nickname");
-      console.log('[ChatContext] Init: nickname from storage =', n);
-
-      // Step 2: Restore cleared-at timestamp (per-user key)
-      if (n) {
-        const ts = await AsyncStorage.getItem(`later_cleared_at_${n.toLowerCase()}`);
-        if (ts) clearedAtRef.current = parseInt(ts, 10);
-      }
-      if (n) {
-        setNicknameState(n);
-        nicknameRef.current = n;
-        // Auto-connect socket so user appears online immediately on app open
-        const apiBase = getApiBaseUrl();
-        console.log('[ChatContext] Init: apiBase =', apiBase, '| socketRef.current?.connected =', socketRef.current?.connected);
-        if (!socketRef.current?.connected) {
-          console.log('[ChatContext] Init: calling io() with', apiBase);
-          const s = io(apiBase, {
-            path: "/api/socket",
-            transports: ["websocket", "polling"],
-            reconnection: true,
-            reconnectionAttempts: 5,
-            reconnectionDelay: 1000,
-          });
-          s.on("connect", () => {
-            s.emit("register_presence", { nickname: n });
-            setIsConnected(true);
-          });
-          s.on("reconnect", () => {
-            s.emit("register_presence", { nickname: nicknameRef.current || n });
-          });
-          setupSocketListeners(s);
-          socketRef.current = s;
-          setSocket(s);
-        }
-      }
-    })();
-  }, []);
-
   const setNickname = useCallback((n: string) => {
     setNicknameState(n);
     nicknameRef.current = n;
@@ -163,7 +119,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-   const setupSocketListeners = useCallback((sock: Socket) => {
+  // IMPORTANT: setupSocketListeners MUST be defined BEFORE the useEffect that calls it
+  // to avoid a temporal dead zone ReferenceError (const is not hoisted like var/function)
+  const setupSocketListeners = useCallback((sock: Socket) => {
     sock.on("connect", () => {
       setIsConnected(true);
     });
@@ -405,6 +363,54 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       setTimeout(() => setIncomingFriendRequest(null), 6000);
     });
   }, []);
+
+  // IMPORTANT: This useEffect runs AFTER setupSocketListeners is defined above.
+  // Previously setupSocketListeners was defined AFTER this useEffect, causing a
+  // temporal dead zone ReferenceError (const cannot be accessed before initialization).
+  useEffect(() => {
+    // Load cleared-at timestamp FIRST, then create socket.
+    // This prevents the race condition where message_history arrives before
+    // the cleared timestamp is restored, causing cleared messages to reappear.
+    (async () => {
+      try {
+        // Step 1: Restore nickname first (needed for per-user cleared_at key)
+        const n = await AsyncStorage.getItem("later_nickname");
+
+        // Step 2: Restore cleared-at timestamp (per-user key)
+        if (n) {
+          const ts = await AsyncStorage.getItem(`later_cleared_at_${n.toLowerCase()}`);
+          if (ts) clearedAtRef.current = parseInt(ts, 10);
+        }
+        if (n) {
+          setNicknameState(n);
+          nicknameRef.current = n;
+          // Auto-connect socket so user appears online immediately on app open
+          const apiBase = getApiBaseUrl();
+          if (!socketRef.current?.connected) {
+            const s = io(apiBase, {
+              path: "/api/socket",
+              transports: ["websocket", "polling"],
+              reconnection: true,
+              reconnectionAttempts: 5,
+              reconnectionDelay: 1000,
+            });
+            s.on("connect", () => {
+              s.emit("register_presence", { nickname: n });
+              setIsConnected(true);
+            });
+            s.on("reconnect", () => {
+              s.emit("register_presence", { nickname: nicknameRef.current || n });
+            });
+            setupSocketListeners(s);
+            socketRef.current = s;
+            setSocket(s);
+          }
+        }
+      } catch (err) {
+        console.error('[ChatContext] Init ERROR:', err);
+      }
+    })();
+  }, [setupSocketListeners]);
 
   const initSocket = useCallback(() => {
     if (socketRef.current?.connected) {
