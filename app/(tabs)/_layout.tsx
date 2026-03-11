@@ -7,8 +7,8 @@ import { useChat } from "@/lib/chat-context";
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
-  const bottomPadding = Platform.OS === "web" ? 12 : Math.max(insets.bottom, 8);
-  const tabBarHeight = 56 + bottomPadding;
+  // On devices with a home indicator (iPhone X+), add safe area at the bottom
+  const safeBottom = Platform.OS === "ios" ? insets.bottom : 0;
 
   // Get unread counts for badges
   const { unreadPMs, pendingFriendRequests } = useChat();
@@ -18,20 +18,22 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: "#FFD700",
-        tabBarInactiveTintColor: "#aaa",
+        tabBarInactiveTintColor: "#ccaaff",
         headerShown: false,
         tabBarButton: HapticTab,
         tabBarStyle: {
-          paddingTop: 8,
-          paddingBottom: bottomPadding,
-          height: tabBarHeight,
           backgroundColor: "#7B0099",
           borderTopColor: "#5A0070",
           borderTopWidth: 1,
+          paddingTop: 6,
+          paddingBottom: safeBottom > 0 ? safeBottom : 8,
+          // No fixed height — let the tab bar size itself based on content
         },
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: "600",
+          marginTop: 2,
+          marginBottom: 0,
         },
       }}
     >
@@ -40,7 +42,7 @@ export default function TabLayout() {
         options={{
           title: "Chat Rooms",
           tabBarIcon: ({ color }) => (
-            <IconSymbol size={26} name="message.fill" color={color} />
+            <IconSymbol size={24} name="message.fill" color={color} />
           ),
           tabBarBadge: totalUnreadPMs > 0 ? totalUnreadPMs : undefined,
         }}
@@ -50,7 +52,7 @@ export default function TabLayout() {
         options={{
           title: "Friends",
           tabBarIcon: ({ color }) => (
-            <IconSymbol size={26} name="person.2.fill" color={color} />
+            <IconSymbol size={24} name="person.2.fill" color={color} />
           ),
           tabBarBadge: pendingFriendRequests > 0 ? pendingFriendRequests : undefined,
         }}
@@ -60,7 +62,7 @@ export default function TabLayout() {
         options={{
           title: "Profile",
           tabBarIcon: ({ color }) => (
-            <IconSymbol size={26} name="person.crop.circle" color={color} />
+            <IconSymbol size={24} name="person.crop.circle" color={color} />
           ),
         }}
       />

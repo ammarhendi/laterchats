@@ -189,3 +189,5 @@
 - [x] Per-user local Clear Chat: every user can clear their own local chat view
 - [x] Friend request socket notifications: real-time notification when someone sends you a friend request
 - [x] Fix online status sync bug: users not appearing in chatters list on other devices even though they show as "Online"
+- [x] Fix tab bar label clipping: "Chat Rooms", "Friends", "Profile" text cut off by tab bar background color
+- [x] Fix dev server connection issue: test link not loading properly
