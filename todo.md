@@ -156,3 +156,15 @@
 - [ ] Fix voice chat between two users (WebRTC signaling, audio playback)
 - [ ] Add Find User feature to Friends screen (search by username)
 - [ ] Full end-to-end review: test every screen and flow
+- [x] Fix font size setting to actually apply to chat messages in real-time
+- [x] Fix font name (Arial dropdown) to actually change the font in chat messages
+- [x] Rebuild admin panel screen with full options (Overview, Users, Bans, Invite, Rooms tabs)
+- [x] Fix Mod button in toolbar — opens rebuilt admin panel with 5 tabs
+- [x] Implement offline PM delivery: store PMs in DB when recipient is offline (server-side done)
+- [ ] Push notification badge when user logs in and has unread offline PMs (frontend delivery pending)
+- [x] CRITICAL: Fix clear chat — now uses socket.to() broadcast, role check enforced
+- [x] CRITICAL: Fix duplicate message bug — server now uses socket.to() + socket.emit() pattern
+- [x] End-to-end encryption (E2EE) for all private messages using ECDH P-256 + AES-GCM 256-bit
+- [x] Secret Mode for private chats: disappearing messages with 5/10/30/60s burn timer, animated fade-out
+- [ ] Fix: Mod button and Chat Tools Admin Panel both route to full /admin screen (unify)
+- [ ] Offline PM delivery frontend: show notification badge on login for unread offline PMs

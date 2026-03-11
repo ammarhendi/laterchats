@@ -114,7 +114,7 @@ function getNicknameColor(nickname: string, isMe: boolean): string {
   return "#7B1FA2";
 }
 
-function MessageItem({ msg, myNickname }: { msg: ChatMessage; myNickname: string }) {
+function MessageItem({ msg, myNickname, fontSize, fontFamily }: { msg: ChatMessage; myNickname: string; fontSize?: number; fontFamily?: string }) {
   if (msg.type === "system") {
     return (
       <View style={styles.systemMsgRow}>
@@ -148,11 +148,11 @@ function MessageItem({ msg, myNickname }: { msg: ChatMessage; myNickname: string
       <View style={styles.msgRowInner}>
         <Text style={styles.msgText}>
           {isSuperAdminMsg && <Text style={{ color: "#4A148C" }}>👑 </Text>}
-          <Text style={[styles.msgNickname, { color: nicknameColor }]}>
+          <Text style={[styles.msgNickname, { color: nicknameColor, fontSize: fontSize ?? 13, fontFamily: fontFamily }]}>
             {msg.senderNickname}
           </Text>
           <Text style={styles.msgSays}>: </Text>
-          <RichText text={msg.content} baseStyle={styles.msgContent} />
+          <RichText text={msg.content} baseStyle={[styles.msgContent, { fontSize: fontSize ?? 13, fontFamily: fontFamily }]} />
         </Text>
         <Text style={styles.msgTimestamp}>{formatTime(msg.createdAt)}</Text>
       </View>
@@ -249,7 +249,18 @@ export default function ChatScreen() {
   const [showTimestamps, setShowTimestamps] = useState(true);
   const [userStatus, setUserStatus] = useState("I'm Available");
   const [showStatusPicker, setShowStatusPicker] = useState(false);
+  const [fontName, setFontName] = useState("System");
   const flatListRef = useRef<FlatList>(null);
+
+  // Map font display names to actual font families
+  const FONT_MAP: Record<string, string | undefined> = {
+    "System": undefined,
+    "Arial": "Arial",
+    "Times New Roman": "Times New Roman",
+    "Courier": Platform.OS === "ios" ? "Courier" : "monospace",
+    "Georgia": "Georgia",
+    "Verdana": "Verdana",
+  };
 
   const { switchRoom, roomId } = useChat();
   const { data: roomsData } = trpc.chat.getAllRooms.useQuery(undefined, { retry: 1 });
@@ -575,7 +586,7 @@ export default function ChatScreen() {
               data={messages}
               keyExtractor={(item, idx) => `${item.id}-${idx}`}
               renderItem={({ item }) => (
-                <MessageItem msg={item} myNickname={nickname || ""} />
+                <MessageItem msg={item} myNickname={nickname || ""} fontSize={fontSize} fontFamily={FONT_MAP[fontName]} />
               )}
               style={styles.messageList}
               contentContainerStyle={styles.messageListContent}
@@ -643,14 +654,14 @@ export default function ChatScreen() {
             <Text style={styles.ymToolBtnText}>😊</Text>
           </TouchableOpacity>
           <View style={styles.toolbarDivider} />
-          {/* Font selector (decorative) */}
-          <View style={styles.ymFontSelect}>
-            <Text style={styles.ymFontSelectText}>Arial ▾</Text>
-          </View>
-          {/* Font size selector (decorative) */}
-          <View style={styles.ymSizeSelect}>
-            <Text style={styles.ymSizeSelectText}>10 ▾</Text>
-          </View>
+          {/* Font selector — opens Settings modal */}
+          <TouchableOpacity style={styles.ymFontSelect} onPress={() => setShowSettings(true)}>
+            <Text style={styles.ymFontSelectText}>{fontName === "System" ? "Font ▾" : fontName.split(" ")[0] + " ▾"}</Text>
+          </TouchableOpacity>
+          {/* Font size selector — opens Settings modal */}
+          <TouchableOpacity style={styles.ymSizeSelect} onPress={() => setShowSettings(true)}>
+            <Text style={styles.ymSizeSelectText}>{fontSize} ▾</Text>
+          </TouchableOpacity>
           <View style={styles.toolbarDivider} />
           {/* Color picker (decorative, like YM) */}
           <TouchableOpacity
@@ -1127,6 +1138,23 @@ export default function ChatScreen() {
               <TouchableOpacity onPress={() => { setShowSettings(false); setShowStatusPicker(true); }}>
                 <Text style={styles.settingsValue}>{userStatus} ▾</Text>
               </TouchableOpacity>
+            </View>
+            <View style={styles.settingsDivider} />
+            <View style={styles.settingsRow}>
+              <Text style={styles.settingsLabel}>Font Name</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ maxWidth: 160 }}>
+                <View style={{ flexDirection: "row", gap: 6, paddingVertical: 2 }}>
+                  {["System", "Arial", "Times New Roman", "Courier", "Georgia", "Verdana"].map((f) => (
+                    <TouchableOpacity
+                      key={f}
+                      onPress={() => setFontName(f)}
+                      style={[{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, borderWidth: 1, borderColor: fontName === f ? "#7B1FA2" : "#E0E0E0", backgroundColor: fontName === f ? "#EDE7F6" : "#fff" }]}
+                    >
+                      <Text style={{ fontSize: 11, color: fontName === f ? "#7B1FA2" : "#555", fontWeight: fontName === f ? "700" : "400" }}>{f}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </ScrollView>
             </View>
             <View style={styles.settingsDivider} />
             <View style={styles.settingsRow}>

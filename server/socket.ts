@@ -1,7 +1,7 @@
 import { Server as SocketIOServer } from "socket.io";
 import { Server as HttpServer } from "http";
 import { getDb, getRoomById } from "./db";
-import { messages, inviteTokens } from "../drizzle/schema";
+import { messages, inviteTokens, offlineMessages } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
 import {
   SUPER_ADMIN_NICKNAME,
@@ -28,6 +28,7 @@ interface ActiveUser {
   role: "super_admin" | "moderator" | "user";
   ipAddress: string;
   joinedAt: Date;
+  publicKeyJwk?: string; // E2EE public key
 }
 
 const activeUsers = new Map<string, ActiveUser>(); // socketId -> user
@@ -68,6 +69,20 @@ export function initSocketServer(httpServer: HttpServer) {
 
   // Store io instance for use by REST endpoints
   ioInstance = io;
+
+  // Per-socket rate limiting: track message timestamps for flood prevention
+  const socketMessageTimestamps = new Map<string, number[]>(); // socketId -> timestamps
+  const RATE_LIMIT_WINDOW_MS = 5000; // 5 seconds
+  const RATE_LIMIT_MAX_MESSAGES = 10; // max 10 messages per 5 seconds
+
+  function isRateLimited(socketId: string): boolean {
+    const now = Date.now();
+    const timestamps = socketMessageTimestamps.get(socketId) || [];
+    const recent = timestamps.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+    recent.push(now);
+    socketMessageTimestamps.set(socketId, recent);
+    return recent.length > RATE_LIMIT_MAX_MESSAGES;
+  }
 
   io.on("connection", (socket) => {
     // Get client IP address
@@ -190,6 +205,48 @@ export function initSocketServer(httpServer: HttpServer) {
           socket.emit("message_history", recentMessages);
         }
 
+        // Deliver offline PMs stored while user was offline
+        if (db) {
+          try {
+            const { and, eq: eqOp } = await import("drizzle-orm");
+            const pendingPMs = await db
+              .select()
+              .from(offlineMessages)
+              .where(and(
+                eqOp(offlineMessages.recipientUsername, nickname.toLowerCase()),
+                eqOp(offlineMessages.isRead, false)
+              ))
+              .limit(50);
+
+            if (pendingPMs.length > 0) {
+              // Deliver each stored PM to the user
+              for (const pm of pendingPMs) {
+                const deliveredMsg = {
+                  id: pm.id,
+                  roomId,
+                  senderNickname: pm.senderNickname,
+                  recipientNickname: nickname,
+                  content: pm.content,
+                  type: "private" as const,
+                  createdAt: pm.createdAt,
+                  isOffline: true,
+                };
+                socket.emit("private_message", deliveredMsg);
+              }
+              // Mark all as read
+              await db
+                .update(offlineMessages)
+                .set({ isRead: true })
+                .where(eqOp(offlineMessages.recipientUsername, nickname.toLowerCase()));
+              // Notify user of offline PMs
+              socket.emit("offline_pms_delivered", { count: pendingPMs.length });
+              console.log(`[Socket] Delivered ${pendingPMs.length} offline PMs to ${nickname}`);
+            }
+          } catch (pmErr) {
+            console.error("[Socket] Failed to deliver offline PMs:", pmErr);
+          }
+        }
+
         const systemMsg = {
           id: Date.now(),
           roomId,
@@ -219,6 +276,17 @@ export function initSocketServer(httpServer: HttpServer) {
         return;
       }
 
+      // Rate limiting: prevent message flooding
+      if (isRateLimited(socket.id)) {
+        socket.emit("error", { message: "You are sending messages too fast. Please slow down." });
+        return;
+      }
+
+      // Input validation and sanitization
+      if (!content || typeof content !== "string") return;
+      const sanitized = content.trim().slice(0, 2000); // max 2000 chars
+      if (!sanitized) return;
+
       try {
         const db = await getDb();
         let savedId = Date.now();
@@ -226,7 +294,7 @@ export function initSocketServer(httpServer: HttpServer) {
           const result = await db.insert(messages).values({
             roomId: user.roomId,
             senderNickname: user.nickname,
-            content,
+            content: sanitized,
             type: "public",
           });
           savedId = (result[0] as any).insertId || savedId;
@@ -236,13 +304,45 @@ export function initSocketServer(httpServer: HttpServer) {
           id: savedId,
           roomId: user.roomId,
           senderNickname: user.nickname,
-          content,
+          content: sanitized,
           type: "public",
           createdAt: new Date(),
         };
-        io.to(`room_${user.roomId}`).emit("new_message", msg);
+        // Use socket.to() to broadcast to others (excludes sender), then emit to sender
+        // This prevents the sender from receiving the message twice
+        socket.to(`room_${user.roomId}`).emit("new_message", msg);
+        socket.emit("new_message", msg);
       } catch (err) {
         console.error("[Socket] send_message error:", err);
+      }
+    });
+
+    // ── E2EE: Publish public key ─────────────────────────────────────────────
+    socket.on("publish_public_key", ({ publicKeyJwk }: { publicKeyJwk: string }) => {
+      const user = activeUsers.get(socket.id);
+      if (!user || !publicKeyJwk) return;
+      // Store the public key on the user object
+      user.publicKeyJwk = publicKeyJwk;
+      // Broadcast to everyone else in the room so they can encrypt messages to this user
+      socket.to(`room_${user.roomId}`).emit("public_key_broadcast", {
+        nickname: user.nickname,
+        publicKeyJwk,
+      });
+      // Also send all existing users' public keys back to this user
+      const roomSockets = io.sockets.adapter.rooms.get(`room_${user.roomId}`);
+      if (roomSockets) {
+        for (const sid of roomSockets) {
+          if (sid === socket.id) continue;
+          const otherSocket = io.sockets.sockets.get(sid);
+          const otherUser = activeUsers.get(sid);
+          const otherKey = otherUser?.publicKeyJwk;
+          if (otherUser && otherKey) {
+            socket.emit("public_key_broadcast", {
+              nickname: otherUser.nickname,
+              publicKeyJwk: otherKey,
+            });
+          }
+        }
       }
     });
 
@@ -277,11 +377,26 @@ export function initSocketServer(httpServer: HttpServer) {
 
         socket.emit("private_message", msg);
 
+        // Find recipient across ALL rooms (PMs are cross-room)
         const recipientSocket = Array.from(activeUsers.values()).find(
-          (u) => u.nickname === recipientNickname && u.roomId === user.roomId
+          (u) => u.nickname === recipientNickname
         );
         if (recipientSocket) {
           io.to(recipientSocket.socketId).emit("private_message", msg);
+        } else {
+          // Recipient is offline — store PM for delivery on next login
+          if (db) {
+            try {
+              await db.insert(offlineMessages).values({
+                senderNickname: user.nickname,
+                recipientUsername: recipientNickname.toLowerCase(),
+                content,
+              });
+              console.log(`[Socket] Stored offline PM from ${user.nickname} to ${recipientNickname}`);
+            } catch (offlineErr) {
+              console.error("[Socket] Failed to store offline PM:", offlineErr);
+            }
+          }
         }
       } catch (err) {
         console.error("[Socket] send_private_message error:", err);
@@ -682,7 +797,11 @@ export function initSocketServer(httpServer: HttpServer) {
         socket.emit("error", { message: "Not in room. Please rejoin." });
         return;
       }
-      // All users can clear chat (each user clears their own local view via room_cleared)
+      // Only super_admin or moderator can clear chat
+      if (user.role !== "super_admin" && user.role !== "moderator") {
+        socket.emit("error", { message: "Only admins can clear the chat." });
+        return;
+      }
       try {
         const db = await getDb();
         if (db) {
@@ -691,10 +810,9 @@ export function initSocketServer(httpServer: HttpServer) {
         } else {
           console.warn("[Socket] No DB connection for clear_room - clearing in memory only");
         }
-        // Broadcast room_cleared to ALL users in the room socket group
+        // Broadcast room_cleared to ALL users in the room (io.to includes sender)
+        // Do NOT emit separately to sender — that would cause double clear
         io.to(`room_${user.roomId}`).emit("room_cleared");
-        // Also emit directly to sender as a safety net
-        socket.emit("room_cleared");
         console.log(`[Socket] Room ${user.roomId} cleared by ${user.nickname}`);
       } catch (err) {
         console.error("[Socket] clear_room error:", err);
@@ -765,6 +883,8 @@ export function initSocketServer(httpServer: HttpServer) {
     });
     // ── Disconnect ────────────────────────────────────────────────────────────
     socket.on("disconnect", () => {
+      // Clean up rate limit tracking for this socket
+      socketMessageTimestamps.delete(socket.id);
       const user = activeUsers.get(socket.id);
       if (user) {
         activeUsers.delete(socket.id);

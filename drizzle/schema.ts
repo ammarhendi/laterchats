@@ -124,3 +124,16 @@ export const chatFriends = mysqlTable("chat_friends", {
 });
 export type ChatFriend = typeof chatFriends.$inferSelect;
 export type InsertChatFriend = typeof chatFriends.$inferInsert;
+
+// Offline private messages (delivered when recipient comes online)
+export const offlineMessages = mysqlTable("offline_messages", {
+  id: int("id").autoincrement().primaryKey(),
+  senderNickname: varchar("senderNickname", { length: 64 }).notNull(),
+  recipientUsername: varchar("recipientUsername", { length: 64 }).notNull(),
+  content: text("content").notNull(),
+  isRead: boolean("isRead").default(false).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type OfflineMessage = typeof offlineMessages.$inferSelect;
+export type InsertOfflineMessage = typeof offlineMessages.$inferInsert;

@@ -3,6 +3,7 @@ import { io, Socket } from "socket.io-client";
 import { getApiBaseUrl } from "@/constants/oauth";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Alert } from "react-native";
+import { getOrCreateKeyPair, registerPublicKey, getPublicKey, encryptMessage, decryptMessage, clearPublicKeyRegistry } from "@/lib/e2ee";
 
 export type UserRole = "super_admin" | "moderator" | "user";
 
@@ -135,6 +136,15 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       setRoomId(rId);
       if (rName) setRoomName(rName);
       setUsers(roomUsers);
+      // Broadcast our public key to the room for E2EE
+      getOrCreateKeyPair().then((pubKeyJwk) => {
+        sock.emit("publish_public_key", { publicKeyJwk: pubKeyJwk });
+      }).catch(() => {});
+    });
+
+    // Receive other users' public keys for E2EE
+    sock.on("public_key_broadcast", ({ nickname: keyOwner, publicKeyJwk }: { nickname: string; publicKeyJwk: string }) => {
+      registerPublicKey(keyOwner, publicKeyJwk);
     });
 
     sock.on("message_history", (history: ChatMessage[]) => {
@@ -149,18 +159,31 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       setMessages((prev) => [...prev, { ...msg, createdAt: new Date(msg.createdAt) }]);
     });
 
-    sock.on("private_message", (msg: ChatMessage) => {
+    sock.on("private_message", async (msg: ChatMessage) => {
       const myNick = nicknameRef.current;
       const otherNickname =
         msg.senderNickname === myNick
           ? (msg.recipientNickname ?? msg.senderNickname)
           : msg.senderNickname;
 
+      // Attempt E2EE decryption if message starts with the encrypted prefix
+      let displayContent = msg.content;
+      if (msg.content.startsWith("e2ee:")) {
+        const encryptedPart = msg.content.slice(5);
+        const senderKey = getPublicKey(msg.senderNickname);
+        if (senderKey) {
+          const decrypted = await decryptMessage(encryptedPart, senderKey);
+          if (decrypted) displayContent = decrypted;
+        }
+      }
+
+      const displayMsg = { ...msg, content: displayContent, createdAt: new Date(msg.createdAt) };
+
       setPrivateMessages((prev) => ({
         ...prev,
         [otherNickname]: [
           ...(prev[otherNickname] || []),
-          { ...msg, createdAt: new Date(msg.createdAt) },
+          displayMsg,
         ],
       }));
 
@@ -171,7 +194,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         }));
         setIncomingPM({
           from: msg.senderNickname,
-          preview: msg.content.length > 40 ? msg.content.slice(0, 40) + "..." : msg.content,
+          preview: displayContent.length > 40 ? displayContent.slice(0, 40) + "..." : displayContent,
         });
         setTimeout(() => setIncomingPM(null), 5000);
       }
@@ -193,6 +216,14 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
     sock.on("room_cleared", () => {
       setMessages([]);
+    });
+
+    sock.on("offline_pms_delivered", ({ count }: { count: number }) => {
+      Alert.alert(
+        "📬 Missed Messages",
+        `You have ${count} private message${count === 1 ? "" : "s"} that arrived while you were offline.`,
+        [{ text: "OK" }]
+      );
     });
 
     // Admin events
@@ -345,6 +376,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     setIsVoiceBanned(false);
     setIsTextMuted(false);
     setMyRole("user");
+    clearPublicKeyRegistry();
     // Clear nickname so chat screen redirects back to home
     setNicknameState(null);
     nicknameRef.current = null;
@@ -355,8 +387,20 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     socketRef.current?.emit("send_message", { content });
   }, []);
 
-  const sendPrivateMessage = useCallback((recipientNickname: string, content: string) => {
-    socketRef.current?.emit("send_private_message", { recipientNickname, content });
+  const sendPrivateMessage = useCallback(async (recipientNickname: string, content: string) => {
+    const sock = socketRef.current;
+    if (!sock) return;
+    // Attempt E2EE encryption if we have recipient's public key
+    const recipientPubKey = getPublicKey(recipientNickname);
+    if (recipientPubKey) {
+      const encrypted = await encryptMessage(content, recipientPubKey);
+      if (encrypted) {
+        sock.emit("send_private_message", { recipientNickname, content: "e2ee:" + encrypted });
+        return;
+      }
+    }
+    // Fallback: send unencrypted (recipient not yet published their key)
+    sock.emit("send_private_message", { recipientNickname, content });
   }, []);
 
   const toggleMute = useCallback(() => {
