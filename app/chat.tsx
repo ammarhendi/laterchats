@@ -61,9 +61,9 @@ function getRoleBadge(role: UserRole): string {
 }
 
 function getRoleColor(role: UserRole): string {
-  if (role === "super_admin") return "#FFD700";
-  if (role === "moderator") return "#00AAFF";
-  return "#7B0099";
+  if (role === "super_admin") return "#6A1B9A";
+  if (role === "moderator") return "#1565C0";
+  return "#7B1FA2";
 }
 
 // Parse text with **bold** and _italic_ markers into React Native Text spans
@@ -109,16 +109,16 @@ const SUPER_ADMIN_NICKNAMES = ["Ammar", "Later"];
 const isSuperAdminName = (nick: string) => SUPER_ADMIN_NICKNAMES.some(n => n.toLowerCase() === nick.toLowerCase());
 
 function getNicknameColor(nickname: string, isMe: boolean): string {
-  if (isSuperAdminName(nickname)) return "#FFD700";
-  if (isMe) return "#CC00CC";
-  return "#7B0099";
+  if (isSuperAdminName(nickname)) return "#4A148C";
+  if (isMe) return "#1565C0";
+  return "#7B1FA2";
 }
 
 function MessageItem({ msg, myNickname }: { msg: ChatMessage; myNickname: string }) {
   if (msg.type === "system") {
     return (
       <View style={styles.systemMsgRow}>
-        <Text style={styles.systemMsgText}>{msg.content}</Text>
+        <Text style={styles.systemMsgText}>— {msg.content}</Text>
       </View>
     );
   }
@@ -147,7 +147,7 @@ function MessageItem({ msg, myNickname }: { msg: ChatMessage; myNickname: string
     <View style={styles.msgRow}>
       <View style={styles.msgRowInner}>
         <Text style={styles.msgText}>
-          {isSuperAdminMsg && <Text style={{ color: "#FFD700" }}>👑 </Text>}
+          {isSuperAdminMsg && <Text style={{ color: "#4A148C" }}>👑 </Text>}
           <Text style={[styles.msgNickname, { color: nicknameColor }]}>
             {msg.senderNickname}
           </Text>
@@ -925,31 +925,31 @@ export default function ChatScreen() {
 }
 
 const styles = StyleSheet.create({
+  // ── Yahoo Messenger style ────────────────────────────────────────────────
   header: {
-    backgroundColor: "#7B0099",
+    backgroundColor: "#7B1FA2",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderBottomWidth: 2,
-    borderBottomColor: "#FFD700",
+    paddingVertical: 9,
   },
   headerLeft: {
     flexDirection: "row",
     alignItems: "baseline",
+    gap: 2,
   },
   headerLogo: {
     color: "#fff",
     fontWeight: "900",
-    fontSize: 20,
+    fontSize: 18,
     letterSpacing: -0.5,
   },
   headerChat: {
-    color: "#FFD700",
-    fontWeight: "900",
-    fontSize: 20,
-    marginLeft: 2,
+    color: "rgba(255,255,255,0.75)",
+    fontWeight: "400",
+    fontSize: 13,
+    marginLeft: 4,
   },
   headerRight: {
     flexDirection: "row",
@@ -957,83 +957,80 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   connDot: {
-    width: 8,
-    height: 8,
+    width: 7,
+    height: 7,
     borderRadius: 4,
   },
-  connDotOn: { backgroundColor: "#00FF00" },
-  connDotOff: { backgroundColor: "#FF0000" },
+  connDotOn: { backgroundColor: "#A5D6A7" },
+  connDotOff: { backgroundColor: "#EF9A9A" },
   headerRoom: {
-    color: "#fff",
+    color: "rgba(255,255,255,0.9)",
     fontSize: 13,
-    fontWeight: "600",
+    fontWeight: "700",
   },
   headerCount: {
-    color: "#FFD700",
+    color: "rgba(255,255,255,0.65)",
     fontSize: 12,
-    fontWeight: "bold",
   },
   adminBtn: {
-    paddingHorizontal: 6,
+    paddingHorizontal: 5,
     paddingVertical: 3,
   },
   adminBtnText: {
-    fontSize: 18,
+    fontSize: 17,
   },
   exitBtn: {
-    backgroundColor: "#5A0070",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 3,
-    borderWidth: 1,
-    borderColor: "#FFD700",
+    backgroundColor: "rgba(0,0,0,0.25)",
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 4,
   },
   exitBtnText: {
-    color: "#FFD700",
+    color: "#fff",
     fontSize: 11,
-    fontWeight: "bold",
+    fontWeight: "700",
   },
   welcomeBanner: {
-    backgroundColor: "#111",
+    backgroundColor: "#F3E5F5",
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderBottomWidth: 1,
-    borderBottomColor: "#333",
+    borderBottomColor: "#E1BEE7",
   },
   welcomeText: {
-    color: "#00AA00",
+    color: "#4A148C",
     fontSize: 12,
   },
   welcomeNick: {
-    color: "#FFD700",
+    color: "#7B1FA2",
     fontWeight: "bold",
   },
   welcomeSubText: {
-    color: "#888",
+    color: "#9E9E9E",
     fontSize: 11,
     marginTop: 1,
   },
   boldText: {
     fontWeight: "bold",
-    color: "#aaa",
+    color: "#616161",
   },
   mainContent: {
     flex: 1,
     flexDirection: "row",
-    backgroundColor: "#000",
+    backgroundColor: "#FAFAFA",
   },
   chatArea: {
     flex: 1,
     borderRightWidth: 1,
-    borderRightColor: "#333",
+    borderRightColor: "#E0E0E0",
   },
   messageList: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: "#FFFFFF",
   },
   messageListContent: {
-    padding: 6,
-    paddingBottom: 10,
+    padding: 8,
+    paddingBottom: 12,
   },
   msgRow: {
     paddingVertical: 2,
@@ -1041,66 +1038,68 @@ const styles = StyleSheet.create({
   },
   msgText: {
     fontSize: 13,
-    lineHeight: 18,
-    color: "#000",
+    lineHeight: 19,
+    color: "#212121",
   },
   msgNickname: {
     fontWeight: "bold",
-    color: "#7B0099",
+    color: "#7B1FA2",
   },
   myNickname: {
-    color: "#0000CC",
+    color: "#1565C0",
   },
   msgSays: {
-    color: "#333",
-    fontStyle: "italic",
+    color: "#757575",
   },
   msgContent: {
-    color: "#000",
+    color: "#212121",
   },
   systemMsgRow: {
-    paddingVertical: 2,
+    paddingVertical: 3,
     paddingHorizontal: 2,
   },
   systemMsgText: {
-    color: "#008000",
+    color: "#43A047",
     fontSize: 12,
     fontStyle: "italic",
   },
   privateMsgRow: {
-    paddingVertical: 2,
-    paddingHorizontal: 2,
+    paddingVertical: 3,
+    paddingHorizontal: 6,
     backgroundColor: "#FFF8E1",
-    borderLeftWidth: 2,
-    borderLeftColor: "#FF6600",
-    marginVertical: 1,
-    borderRadius: 2,
+    borderLeftWidth: 3,
+    borderLeftColor: "#FF6D00",
+    marginVertical: 2,
+    borderRadius: 3,
   },
   privateMsgText: {
     fontSize: 13,
     lineHeight: 18,
   },
   privateLabel: {
-    color: "#FF6600",
+    color: "#FF6D00",
     fontWeight: "bold",
   },
   privateMsgContent: {
-    color: "#333",
+    color: "#424242",
     fontStyle: "italic",
   },
+  // Users panel — YM contact list style
   usersPanel: {
-    width: 110,
-    backgroundColor: "#f0f0f0",
+    width: 108,
+    backgroundColor: "#F5F5F5",
+    borderLeftWidth: 1,
+    borderLeftColor: "#E0E0E0",
   },
   usersPanelHeader: {
-    backgroundColor: "#7B0099",
-    paddingVertical: 4,
-    paddingHorizontal: 6,
+    backgroundColor: "#7B1FA2",
+    paddingVertical: 5,
+    paddingHorizontal: 8,
   },
   usersPanelTitle: {
     color: "#fff",
-    fontSize: 12,
-    fontWeight: "bold",
+    fontSize: 11,
+    fontWeight: "700",
   },
   usersList: {
     flex: 1,
@@ -1108,72 +1107,75 @@ const styles = StyleSheet.create({
   userItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 6,
-    paddingVertical: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 5,
     borderBottomWidth: 0.5,
-    borderBottomColor: "#ddd",
+    borderBottomColor: "#E0E0E0",
+    backgroundColor: "#FFFFFF",
   },
   userDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
     marginRight: 5,
+    flexShrink: 0,
   },
-  userDotOnline: { backgroundColor: "#00AA00" },
-  userDotVoice: { backgroundColor: "#FF6600" },
+  userDotOnline: { backgroundColor: "#43A047" },
+  userDotVoice: { backgroundColor: "#FB8C00" },
   userName: {
     fontSize: 11,
     flex: 1,
+    color: "#212121",
   },
   mutedIcon: {
     fontSize: 10,
     marginLeft: 2,
   },
+  // Toolbar
   toolbar: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#1a1a1a",
+    backgroundColor: "#F5F5F5",
     paddingHorizontal: 8,
     paddingVertical: 5,
     borderTopWidth: 1,
-    borderTopColor: "#333",
+    borderTopColor: "#E0E0E0",
     gap: 4,
   },
   toolbarBtn: {
-    backgroundColor: "#333",
+    backgroundColor: "#FFFFFF",
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 3,
+    borderRadius: 4,
     borderWidth: 1,
-    borderColor: "#555",
+    borderColor: "#BDBDBD",
   },
   toolbarBtnText: {
-    color: "#fff",
-    fontSize: 13,
+    fontSize: 15,
   },
   toolbarBtnActive: {
-    backgroundColor: "#5A0070",
-    borderColor: "#FFD700",
+    backgroundColor: "#EDE7F6",
+    borderColor: "#7B1FA2",
   },
   clearBtn: {
-    backgroundColor: "#CC0000",
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 3,
+    backgroundColor: "#C62828",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
     marginRight: 2,
   },
   clearBtnText: {
     color: "#fff",
     fontSize: 11,
-    fontWeight: "bold",
+    fontWeight: "700",
   },
   roomSwitchBtn: {
-    backgroundColor: "#5A0070",
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 3,
+    backgroundColor: "#EDE7F6",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
     borderWidth: 1,
-    borderColor: "#FFD700",
+    borderColor: "#CE93D8",
     marginRight: 2,
   },
   roomSwitchBtnText: {
@@ -1182,46 +1184,47 @@ const styles = StyleSheet.create({
   roomSwitchItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 12,
+    paddingVertical: 13,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "#222",
+    borderBottomColor: "#EEEEEE",
     gap: 10,
+    backgroundColor: "#FFFFFF",
   },
   roomSwitchItemActive: {
-    backgroundColor: "#1a0022",
+    backgroundColor: "#F3E5F5",
   },
   roomSwitchIcon: {
-    fontSize: 22,
-    width: 30,
+    fontSize: 20,
+    width: 28,
     textAlign: "center",
   },
   roomSwitchName: {
     flex: 1,
-    color: "#fff",
+    color: "#212121",
     fontSize: 15,
     fontWeight: "600",
   },
   roomSwitchNameActive: {
-    color: "#FFD700",
+    color: "#7B1FA2",
   },
   roomSwitchCurrent: {
-    color: "#00CC00",
+    color: "#43A047",
     fontSize: 12,
     fontWeight: "bold",
   },
   toolbarSep: {
-    color: "#555",
+    color: "#BDBDBD",
     marginHorizontal: 4,
   },
   emojiPicker: {
     flexDirection: "row",
     flexWrap: "wrap",
-    backgroundColor: "#222",
+    backgroundColor: "#FAFAFA",
     paddingHorizontal: 8,
     paddingVertical: 6,
     borderTopWidth: 1,
-    borderTopColor: "#444",
+    borderTopColor: "#E0E0E0",
   },
   emojiBtn: {
     padding: 5,
@@ -1229,94 +1232,96 @@ const styles = StyleSheet.create({
   emojiText: {
     fontSize: 22,
   },
+  // Input row — YM style
   inputRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#111",
+    backgroundColor: "#FAFAFA",
     paddingHorizontal: 8,
     paddingVertical: 6,
     borderTopWidth: 1,
-    borderTopColor: "#333",
+    borderTopColor: "#E0E0E0",
     gap: 6,
   },
   inputLabel: {
-    color: "#aaa",
+    color: "#757575",
     fontSize: 12,
     fontWeight: "600",
     minWidth: 36,
   },
   chatInput: {
     flex: 1,
-    backgroundColor: "#fff",
-    color: "#000",
+    backgroundColor: "#FFFFFF",
+    color: "#212121",
     borderWidth: 1,
-    borderColor: "#555",
-    borderRadius: 3,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
+    borderColor: "#BDBDBD",
+    borderRadius: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
     fontSize: 14,
   },
   chatInputMuted: {
-    backgroundColor: "#f0f0f0",
-    color: "#999",
+    backgroundColor: "#F5F5F5",
+    color: "#9E9E9E",
   },
   sendBtn: {
-    backgroundColor: "#7B0099",
+    backgroundColor: "#7B1FA2",
     paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 3,
+    paddingVertical: 8,
+    borderRadius: 4,
   },
   sendBtnDisabled: {
-    backgroundColor: "#444",
+    backgroundColor: "#BDBDBD",
   },
   sendBtnText: {
     color: "#fff",
-    fontWeight: "bold",
+    fontWeight: "700",
     fontSize: 13,
   },
+  // Voice bar — YM Talk button style
   voiceBar: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#0a0a0a",
+    backgroundColor: "#EDE7F6",
     paddingHorizontal: 8,
     paddingVertical: 6,
     borderTopWidth: 1,
-    borderTopColor: "#222",
+    borderTopColor: "#D1C4E9",
     gap: 6,
   },
   voiceLabel: {
-    color: "#aaa",
+    color: "#4A148C",
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "700",
     minWidth: 40,
   },
   voiceBtn: {
-    backgroundColor: "#333",
+    backgroundColor: "#FFFFFF",
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 3,
+    borderRadius: 4,
     borderWidth: 1,
-    borderColor: "#555",
+    borderColor: "#CE93D8",
   },
   voiceBtnActive: {
-    backgroundColor: "#FF6600",
-    borderColor: "#FF8833",
+    backgroundColor: "#FB8C00",
+    borderColor: "#F57C00",
   },
   voiceBtnText: {
-    color: "#fff",
+    color: "#4A148C",
     fontSize: 12,
     fontWeight: "600",
   },
   talkBtn: {
-    backgroundColor: "#7B0099",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 3,
+    backgroundColor: "#7B1FA2",
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 4,
   },
   talkBtnText: {
     color: "#fff",
     fontSize: 12,
-    fontWeight: "bold",
+    fontWeight: "700",
   },
   voiceStatus: {
     flex: 1,
@@ -1324,52 +1329,58 @@ const styles = StyleSheet.create({
   },
   voiceStatusActive: {},
   voiceStatusText: {
-    color: "#888",
+    color: "#9E9E9E",
     fontSize: 11,
   },
   voiceBannedText: {
-    color: "#FF4444",
+    color: "#C62828",
     fontSize: 12,
     flex: 1,
   },
   voiceError: {
-    color: "#FF4444",
+    color: "#C62828",
     fontSize: 10,
     flex: 1,
   },
+  // Modals — YM style (white/light)
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
+    backgroundColor: "rgba(0,0,0,0.45)",
     justifyContent: "center",
     alignItems: "center",
   },
   modalBox: {
-    backgroundColor: "#1a1a1a",
+    backgroundColor: "#FFFFFF",
     borderRadius: 8,
     width: 280,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#7B0099",
+    borderColor: "#CE93D8",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
   },
   modalTitle: {
-    color: "#FFD700",
+    color: "#fff",
     fontWeight: "bold",
-    fontSize: 16,
+    fontSize: 15,
     textAlign: "center",
     paddingVertical: 12,
-    backgroundColor: "#7B0099",
+    backgroundColor: "#7B1FA2",
   },
   modalDivider: {
     height: 1,
-    backgroundColor: "#333",
+    backgroundColor: "#EEEEEE",
   },
   modalSectionLabel: {
     paddingVertical: 6,
     paddingHorizontal: 20,
-    backgroundColor: "#111",
+    backgroundColor: "#F5F5F5",
   },
   modalSectionLabelText: {
-    color: "#666",
+    color: "#9E9E9E",
     fontSize: 11,
     textAlign: "center",
   },
@@ -1377,10 +1388,10 @@ const styles = StyleSheet.create({
     paddingVertical: 13,
     paddingHorizontal: 20,
     borderBottomWidth: 1,
-    borderBottomColor: "#333",
+    borderBottomColor: "#F5F5F5",
   },
   modalOptionText: {
-    color: "#fff",
+    color: "#212121",
     fontSize: 14,
   },
   modalCancel: {
@@ -1388,25 +1399,26 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   modalCancelText: {
-    color: "#888",
+    color: "#9E9E9E",
     fontSize: 14,
   },
   banInputArea: {
     padding: 12,
     gap: 8,
+    backgroundColor: "#FFFFFF",
   },
   banInputLabel: {
-    color: "#aaa",
+    color: "#757575",
     fontSize: 12,
   },
   banInput: {
-    backgroundColor: "#000",
+    backgroundColor: "#FAFAFA",
     borderWidth: 1,
-    borderColor: "#555",
+    borderColor: "#BDBDBD",
     borderRadius: 4,
     paddingHorizontal: 10,
     paddingVertical: 8,
-    color: "#fff",
+    color: "#212121",
     fontSize: 14,
   },
   banInputBtns: {
@@ -1418,17 +1430,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 4,
-    backgroundColor: "#333",
+    backgroundColor: "#F5F5F5",
+    borderWidth: 1,
+    borderColor: "#BDBDBD",
   },
   banCancelBtnText: {
-    color: "#aaa",
+    color: "#757575",
     fontSize: 13,
   },
   banConfirmBtn: {
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 4,
-    backgroundColor: "#CC0000",
+    backgroundColor: "#C62828",
   },
   banConfirmBtnText: {
     color: "#fff",
@@ -1437,7 +1451,7 @@ const styles = StyleSheet.create({
   },
   // Banned list
   emptyBannedText: {
-    color: "#888",
+    color: "#9E9E9E",
     textAlign: "center",
     padding: 20,
     fontSize: 13,
@@ -1448,24 +1462,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: "#333",
+    borderBottomColor: "#EEEEEE",
     gap: 8,
+    backgroundColor: "#FFFFFF",
   },
   bannedNick: {
-    color: "#fff",
+    color: "#212121",
     fontWeight: "bold",
     fontSize: 13,
   },
   bannedIp: {
-    color: "#888",
+    color: "#9E9E9E",
     fontSize: 11,
   },
   bannedType: {
-    color: "#FF8800",
+    color: "#FB8C00",
     fontSize: 11,
   },
   unbanBtn: {
-    backgroundColor: "#006600",
+    backgroundColor: "#2E7D32",
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 4,
@@ -1482,9 +1497,9 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 999,
-    backgroundColor: "#3D0050",
-    borderBottomWidth: 2,
-    borderBottomColor: "#FFD700",
+    backgroundColor: "#7B1FA2",
+    borderBottomWidth: 1,
+    borderBottomColor: "#CE93D8",
     flexDirection: "row" as const,
     alignItems: "center" as const,
     paddingHorizontal: 12,
@@ -1495,18 +1510,18 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   pmBannerTitle: {
-    color: "#FFD700",
+    color: "#FFFFFF",
     fontWeight: "bold" as const,
     fontSize: 12,
     marginBottom: 1,
   },
   pmBannerFrom: {
-    color: "#FF9900",
+    color: "#E1BEE7",
     fontSize: 12,
     fontWeight: "600" as const,
   },
   pmBannerPreview: {
-    color: "#ddd",
+    color: "rgba(255,255,255,0.8)",
     fontSize: 12,
     marginTop: 1,
   },
@@ -1516,7 +1531,7 @@ const styles = StyleSheet.create({
     alignItems: "center" as const,
   },
   pmBannerReply: {
-    backgroundColor: "#7B0099",
+    backgroundColor: "rgba(255,255,255,0.25)",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 4,
@@ -1564,26 +1579,31 @@ const styles = StyleSheet.create({
     zIndex: 999,
   },
   callBox: {
-    backgroundColor: "#1a0a2e",
-    borderRadius: 20,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
     padding: 28,
     alignItems: "center" as const,
     width: 280,
-    borderWidth: 2,
-    borderColor: "#7B0099",
+    borderWidth: 1,
+    borderColor: "#CE93D8",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 10,
   },
   callIcon: {
     fontSize: 48,
     marginBottom: 12,
   },
   callTitle: {
-    color: "#fff",
+    color: "#212121",
     fontSize: 18,
     fontWeight: "bold" as const,
     marginBottom: 6,
   },
   callFrom: {
-    color: "#FFD700",
+    color: "#7B1FA2",
     fontSize: 22,
     fontWeight: "bold" as const,
     marginBottom: 24,
@@ -1619,16 +1639,19 @@ const styles = StyleSheet.create({
     top: 60,
     left: 10,
     right: 10,
-    backgroundColor: "#330055",
-    borderRadius: 10,
+    backgroundColor: "#7B1FA2",
+    borderRadius: 8,
     paddingHorizontal: 14,
     paddingVertical: 10,
     flexDirection: "row" as const,
     alignItems: "center" as const,
     justifyContent: "space-between" as const,
     zIndex: 100,
-    borderWidth: 1,
-    borderColor: "#7B0099",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 6,
   },
   callBannerText: {
     color: "#fff",
@@ -1656,7 +1679,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   msgTimestamp: {
-    color: "rgba(255,255,255,0.35)",
+    color: "#BDBDBD",
     fontSize: 10,
     marginLeft: 4,
     flexShrink: 0,
