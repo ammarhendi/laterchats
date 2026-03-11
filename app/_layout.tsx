@@ -5,7 +5,8 @@ import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
-import { Platform, Alert, AppState } from "react-native";
+import { Platform, AppState } from "react-native";
+import { crossInfo } from "@/lib/cross-alert";
 import "@/lib/_core/nativewind-pressable";
 import { ThemeProvider } from "@/lib/theme-provider";
 import {
@@ -82,10 +83,7 @@ export default function RootLayout() {
 
     // Alert user if they attempt a screenshot
     const screenshotSub = ScreenCapture.addScreenshotListener(() => {
-      Alert.alert(
-        "\uD83D\uDD12 Screenshot Blocked",
-        "Screenshots are not allowed in Later to protect all users\u2019 privacy.",
-      );
+      crossInfo("🔒 Screenshot Blocked", "Screenshots are not allowed in Later to protect all users’ privacy.");
     });
 
     // Re-apply protection every time app becomes active (foreground)
@@ -159,6 +157,8 @@ export default function RootLayout() {
             <Stack.Screen name="pm/[nickname]" options={{ presentation: "modal" }} />
             <Stack.Screen name="admin" options={{ presentation: "modal" }} />
             <Stack.Screen name="oauth/callback" />
+            <Stack.Screen name="privacy" options={{ presentation: "modal" }} />
+            <Stack.Screen name="terms" options={{ presentation: "modal" }} />
           </Stack>
           <StatusBar style="auto" />
           </ChatProvider>

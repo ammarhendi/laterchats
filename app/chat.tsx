@@ -10,7 +10,6 @@ import {
   Pressable,
   Platform,
   KeyboardAvoidingView,
-  Alert,
   ScrollView,
 } from "react-native";
 import { useRouter } from "expo-router";
@@ -20,6 +19,7 @@ import { useVoiceChat } from "@/lib/use-voice-chat";
 import { usePrivateCall } from "@/lib/use-private-call";
 import { trpc } from "@/lib/trpc";
 import * as Haptics from "expo-haptics";
+import { crossAlert, crossInfo, crossConfirm } from "@/lib/cross-alert";
 
 const ROOM_ICONS: Record<string, string> = {
   "Now": "⚡",
@@ -290,7 +290,7 @@ export default function ChatScreen() {
   useEffect(() => {
     if (!isMounted) return;
     if (!nickname) {
-      router.replace("/" as any);
+      router.replace("/(tabs)/friends" as any);
     }
   }, [nickname, isMounted]);
 
@@ -325,7 +325,7 @@ export default function ChatScreen() {
     const text = inputText.trim();
     if (!text) return;
     if (isTextMuted) {
-      Alert.alert("Muted", "You have been muted and cannot send messages.");
+      crossInfo("Muted", "You have been muted and cannot send messages.");
       return;
     }
     // Send plain text exactly as typed — no formatting markers
@@ -369,14 +369,14 @@ export default function ChatScreen() {
     if (!name) return;
     setIgnoredUsers((prev) => prev.includes(name) ? prev : [...prev, name]);
     setShowUserModal(false);
-    Alert.alert("Ignored", `${name} has been added to your ignore list. Their messages will be hidden.`);
+    crossInfo("Ignored", `${name} has been added to your ignore list. Their messages will be hidden.`);
   };
 
   const handleAddFriend = () => {
     if (!selectedUser || !nickname) return;
     const targetNick = selectedUser.nickname;
     setShowUserModal(false);
-    Alert.alert(
+    crossAlert(
       "Add Friend",
       `Send a friend request to ${targetNick}?`,
       [
@@ -390,12 +390,12 @@ export default function ChatScreen() {
                 recipientUsername: targetNick,
               });
               if (result.success) {
-                Alert.alert("Request Sent", `Friend request sent to ${targetNick}!`);
+                crossInfo("Request Sent", `Friend request sent to ${targetNick}!`);
               } else {
-                Alert.alert("Error", (result as any).error || "Could not send friend request.");
+                crossInfo("Error", (result as any).error || "Could not send friend request.");
               }
             } catch {
-              Alert.alert("Error", "Could not send friend request. Make sure you are both registered users.");
+              crossInfo("Error", "Could not send friend request. Make sure you are both registered users.");
             }
           },
         },
@@ -403,21 +403,13 @@ export default function ChatScreen() {
     );
   };
 
-  const handleKick = () => {
+  const handleKick = async () => {
     if (!selectedUser) return;
-    Alert.alert(
-      "Kick User",
-      `Kick ${selectedUser.nickname} from the room?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Kick", style: "destructive", onPress: () => {
-            kickUser(selectedUser.nickname);
-            setShowUserModal(false);
-          }
-        },
-      ]
-    );
+    const confirmed = await crossConfirm("Kick User", `Kick ${selectedUser.nickname} from the room?`, "Kick", "Cancel");
+    if (confirmed) {
+      kickUser(selectedUser.nickname);
+      setShowUserModal(false);
+    }
   };
 
   const handleBan = (voiceOnly: boolean) => {
@@ -434,38 +426,22 @@ export default function ChatScreen() {
     setBanReason("");
   };
 
-  const handlePromote = () => {
+  const handlePromote = async () => {
     if (!selectedUser) return;
-    Alert.alert(
-      "Promote to Moderator",
-      `Promote ${selectedUser.nickname} to Moderator?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Promote", onPress: () => {
-            promoteUser(selectedUser.nickname);
-            setShowUserModal(false);
-          }
-        },
-      ]
-    );
+    const confirmed = await crossConfirm("Promote to Moderator", `Promote ${selectedUser.nickname} to Moderator?`, "Promote", "Cancel");
+    if (confirmed) {
+      promoteUser(selectedUser.nickname);
+      setShowUserModal(false);
+    }
   };
 
-  const handleDemote = () => {
+  const handleDemote = async () => {
     if (!selectedUser) return;
-    Alert.alert(
-      "Remove Moderator",
-      `Remove moderator role from ${selectedUser.nickname}?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Remove", style: "destructive", onPress: () => {
-            demoteUser(selectedUser.nickname);
-            setShowUserModal(false);
-          }
-        },
-      ]
-    );
+    const confirmed = await crossConfirm("Remove Moderator", `Remove moderator role from ${selectedUser.nickname}?`, "Remove", "Cancel");
+    if (confirmed) {
+      demoteUser(selectedUser.nickname);
+      setShowUserModal(false);
+    }
   };
 
   const handleMuteText = () => {
@@ -480,7 +456,7 @@ export default function ChatScreen() {
 
   const handleToggleVoice = async () => {
     if (isVoiceBanned) {
-      Alert.alert("Voice Banned", "You have been voice-banned by the admin.");
+      crossInfo("Voice Banned", "You have been voice-banned by the admin.");
       return;
     }
     if (!isVoiceEnabled) {
@@ -499,47 +475,34 @@ export default function ChatScreen() {
 
   const handleLeave = () => {
     leaveRoom();
-    router.replace("/" as any);
+    router.replace("/(tabs)/friends" as any);
   };
 
-  const handleLocalClearChat = () => {
-    // Alert.alert does not work on web — use cross-platform confirm
-    if (Platform.OS === "web") {
-      // On web, just clear directly (no native dialog available)
+  const handleLocalClearChat = async () => {
+    const confirmed = await crossConfirm(
+      "Clear My View",
+      "Clear all messages from your screen? This only clears your view — other users are not affected.",
+      "Clear",
+      "Cancel"
+    );
+    if (confirmed) {
       setClearAtCount(messages.length);
-    } else {
-      Alert.alert(
-        "Clear My View",
-        "Clear all messages from your screen? This only clears your view — other users are not affected.",
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Clear",
-            style: "destructive",
-            onPress: () => {
-              setClearAtCount(messages.length);
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            },
-          },
-        ]
-      );
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
     }
   };
 
-  const handleClearChat = () => {
-    Alert.alert("Clear Chat", "Clear all messages for everyone in the room?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Clear", style: "destructive", onPress: () => {
-          if (!isConnected) {
-            Alert.alert("Error", "Not connected to server. Please wait and try again.");
-            return;
-          }
-          clearAllMessages();
-          setShowAdminPanel(false);
-        }
-      },
-    ]);
+  const handleClearChat = async () => {
+    const confirmed = await crossConfirm("Clear Chat", "Clear all messages for everyone in the room?", "Clear", "Cancel");
+    if (confirmed) {
+      if (!isConnected) {
+        crossInfo("Error", "Not connected to server. Please wait and try again.");
+        return;
+      }
+      clearAllMessages();
+      setShowAdminPanel(false);
+    }
   };
 
   const handleShowBanned = () => {
@@ -548,11 +511,9 @@ export default function ChatScreen() {
     setShowAdminPanel(false);
   };
 
-  const handleUnban = (targetNickname: string) => {
-    Alert.alert("Unban", `Unban ${targetNickname}?`, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Unban", onPress: () => unbanUser(targetNickname) },
-    ]);
+  const handleUnban = async (targetNickname: string) => {
+    const confirmed = await crossConfirm("Unban", `Unban ${targetNickname}?`, "Unban", "Cancel");
+    if (confirmed) unbanUser(targetNickname);
   };
 
   return (
@@ -706,7 +667,7 @@ export default function ChatScreen() {
             </View>
             <View style={styles.usersPanelSubBar}>
               <TouchableOpacity style={styles.usersPanelDropBtn}
-                onPress={() => Alert.alert("Menu", "Options:\n• View Profile\n• Add to Friends\n• Ignore User")}
+                onPress={() => crossInfo("Menu", "Options:\n• View Profile\n• Add to Friends\n• Ignore User")}
               >
                 <Text style={styles.usersPanelDropText}>Menu ▾</Text>
               </TouchableOpacity>
@@ -769,7 +730,7 @@ export default function ChatScreen() {
           {/* Color picker (decorative, like YM) */}
           <TouchableOpacity
             style={styles.ymToolBtn}
-            onPress={() => Alert.alert("Text Color", "Text color selection coming soon!")}
+            onPress={() => crossInfo("Text Color", "Text color selection coming soon!")}
           >
             <Text style={[styles.ymToolBtnText, { color: "#CC0000" }]}>A</Text>
           </TouchableOpacity>
@@ -857,7 +818,7 @@ export default function ChatScreen() {
               } else if (users.length > 0) {
                 const other = users.find(u => u.nickname !== nickname);
                 if (other) router.push(`/pm/${other.nickname}` as any);
-                else Alert.alert("IM", "Tap a user in the Chatters list first.");
+                else crossInfo("IM", "Tap a user in the Chatters list first.");
               }
             }}
           >
@@ -867,9 +828,9 @@ export default function ChatScreen() {
             style={styles.ymInputActionBtn}
             onPress={() => {
               if (selectedUser && selectedUser.role !== "super_admin") {
-                Alert.alert("Ignored", `${selectedUser.nickname} has been ignored.`);
+                crossInfo("Ignored", `${selectedUser.nickname} has been ignored.`);
               } else {
-                Alert.alert("Ignore", "Tap a user in the Chatters list first.");
+                crossInfo("Ignore", "Tap a user in the Chatters list first.");
               }
             }}
           >
@@ -925,10 +886,9 @@ export default function ChatScreen() {
               style={styles.modalOption}
               onPress={() => {
                 setShowUserModal(false);
-                Alert.alert(
+                crossInfo(
                   `${selectedUser?.nickname}'s Profile`,
-                  `Username: ${selectedUser?.nickname}\nRole: ${selectedUser?.role || "user"}\nStatus: ${selectedUser?.isVoiceActive ? "🎙️ Voice Active" : "Online"}`,
-                  [{ text: "Close" }]
+                  `Username: ${selectedUser?.nickname}\nRole: ${selectedUser?.role || "user"}\nStatus: ${selectedUser?.isVoiceActive ? "🎙️ Voice Active" : "Online"}`
                 );
               }}
             >
@@ -1190,7 +1150,7 @@ export default function ChatScreen() {
             </TouchableOpacity>
             <TouchableOpacity style={styles.modalOption} onPress={() => {
               setShowChatTools(false);
-              Alert.alert("Chat Rules", "Later! Chat Rules:\n\n1. Be respectful to all users.\n2. No harassment or bullying.\n3. No spam or advertising.\n4. No sharing of personal information.\n5. Keep conversations appropriate.\n6. Moderators may remove users who violate these rules.");
+              crossInfo("Chat Rules", "Later! Chat Rules:\n\n1. Be respectful to all users.\n2. No harassment or bullying.\n3. No spam or advertising.\n4. No sharing of personal information.\n5. Keep conversations appropriate.\n6. Moderators may remove users who violate these rules.");
             }}>
               <Text style={styles.modalOptionText}>📋 Chat Rules</Text>
             </TouchableOpacity>

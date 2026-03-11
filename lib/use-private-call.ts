@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from "react";
-import { Platform, Alert } from "react-native";
+import { Platform } from "react-native";
+import { crossInfo } from "./cross-alert";
 import { useChat } from "./chat-context";
 
 // Dynamically import react-native-webrtc on native
@@ -173,7 +174,7 @@ export function usePrivateCall() {
         cleanup();
         setCallStateSync("idle");
         setCallPartner(null);
-        Alert.alert("No Answer", `${targetNickname} didn't answer.`);
+        crossInfo("No Answer", `${targetNickname} didn't answer.`);
       }
     }, 30000);
   }, [socket, cleanup, setCallStateSync]);
@@ -195,7 +196,7 @@ export function usePrivateCall() {
     try {
       const mediaDevices = getMediaDevices();
       if (!mediaDevices) {
-        Alert.alert("Error", "Microphone not available");
+        crossInfo("Error", "Microphone not available");
         socket.emit("private_call_reject", { targetNickname: from });
         setCallState("idle");
         return;
@@ -203,7 +204,7 @@ export function usePrivateCall() {
       const stream = await mediaDevices.getUserMedia({ audio: true, video: false });
       localStreamRef.current = stream;
     } catch {
-      Alert.alert("Error", "Could not access microphone");
+      crossInfo("Error", "Could not access microphone");
       socket.emit("private_call_reject", { targetNickname: from });
       setCallState("idle");
       return;
@@ -285,14 +286,14 @@ export function usePrivateCall() {
       try {
         const mediaDevices = getMediaDevices();
         if (!mediaDevices) {
-          Alert.alert("Error", "Microphone not available");
+          crossInfo("Error", "Microphone not available");
           endCall();
           return;
         }
         const stream = await mediaDevices.getUserMedia({ audio: true, video: false });
         localStreamRef.current = stream;
       } catch {
-        Alert.alert("Error", "Could not access microphone");
+        crossInfo("Error", "Could not access microphone");
         endCall();
         return;
       }
@@ -325,7 +326,7 @@ export function usePrivateCall() {
       cleanup();
       setCallState("idle");
       setCallPartner(null);
-      Alert.alert("Call Declined", reason || `${fromNickname} declined the call.`);
+      crossInfo("Call Declined", reason || `${fromNickname} declined the call.`);
     };
 
     const handleEnded = ({ fromNickname }: { fromNickname: string }) => {

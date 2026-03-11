@@ -9,7 +9,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   Animated,
-  Alert,
   Image,
   ActivityIndicator,
 } from "react-native";
@@ -17,6 +16,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useChat, ChatMessage } from "@/lib/chat-context";
 import * as Haptics from "expo-haptics";
+import { crossInfo } from "@/lib/cross-alert";
 import * as ImagePicker from "expo-image-picker";
 import { VideoView, useVideoPlayer } from "expo-video";
 import { getApiBaseUrl } from "@/constants/oauth";
@@ -142,6 +142,12 @@ export default function PrivateMessageScreen() {
 
   const isTargetOnline = users.some((u) => u.nickname === targetNickname);
 
+  // Auto-detect if the other person has Secret Mode on (based on their last message)
+  const theirLastMsg = [...rawMessages].reverse().find(m => m.senderNickname === targetNickname);
+  const theirSecretModeOn = theirLastMsg
+    ? (theirLastMsg.content.startsWith("🔐secret:") || theirLastMsg.content.startsWith("🔐secretmedia:"))
+    : false;
+
   useEffect(() => {
     if (rawMessages.length > 0) {
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
@@ -181,10 +187,10 @@ export default function PrivateMessageScreen() {
         sendPrivateMessage(targetNickname, `${prefix}${data.url}|${mediaType}`);
         if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } else {
-        Alert.alert("Upload failed", data.error || "Could not upload media.");
+        crossInfo("Upload failed", data.error || "Could not upload media.");
       }
     } catch {
-      Alert.alert("Upload error", "Could not upload media. Please try again.");
+      crossInfo("Upload error", "Could not upload media. Please try again.");
     } finally {
       setUploading(false);
     }
@@ -203,7 +209,7 @@ export default function PrivateMessageScreen() {
 
   const takePhoto = useCallback(async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== "granted") { Alert.alert("Permission needed", "Camera permission is required."); return; }
+    if (status !== "granted") { crossInfo("Permission needed", "Camera permission is required."); return; }
     const result = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 });
     if (!result.canceled && result.assets[0]) {
       await uploadAndSend(result.assets[0].uri, result.assets[0].mimeType || "image/jpeg", secretMode);
@@ -214,7 +220,7 @@ export default function PrivateMessageScreen() {
     const next = !secretMode;
     setSecretMode(next);
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    if (next) Alert.alert("🔐 Secret Mode", `Messages disappear after ${burnSeconds}s.`, [{ text: "Got it" }]);
+    if (next) crossInfo("🔐 Secret Mode", `Messages disappear after ${burnSeconds}s.`);
   }, [secretMode, burnSeconds]);
 
   const BURN_OPTIONS = [5, 10, 30, 60];
@@ -251,6 +257,16 @@ export default function PrivateMessageScreen() {
             <Text style={styles.e2eeLabel}>🔒 E2EE</Text>
           </View>
         </View>
+
+        {/* ── Other Person's Secret Mode Banner ── */}
+        {theirSecretModeOn && !secretMode && (
+          <View style={styles.theirSecretBanner}>
+            <Text style={styles.theirSecretBannerText}>🔐 {targetNickname} has Secret Mode ON — tap to enable yours</Text>
+            <TouchableOpacity onPress={toggleSecretMode}>
+              <Text style={styles.theirSecretBannerBtn}>Enable</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* ── Secret Mode Bar ── */}
         <View style={[styles.secretBar, secretMode && styles.secretBarActive]}>
@@ -671,4 +687,16 @@ const styles = StyleSheet.create({
     borderTopColor: "#F0F0F0",
   },
   footerText: { color: "#CCCCCC", fontSize: 9 },
+  theirSecretBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#FFF3CD",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: "#FFD700",
+  },
+  theirSecretBannerText: { flex: 1, fontSize: 12, color: "#856404" },
+  theirSecretBannerBtn: { fontSize: 12, fontWeight: "700", color: "#5C3D00", marginLeft: 8 },
 });

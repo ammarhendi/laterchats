@@ -490,13 +490,14 @@ export function initSocketServer(httpServer: HttpServer) {
     socket.on("private_call_request", ({ targetNickname }: { targetNickname: string }) => {
       const caller = activeUsers.get(socket.id);
       if (!caller) return;
+      // Cross-room: find by nickname only (no room restriction)
       const target = Array.from(activeUsers.values()).find(
-        (u) => u.nickname === targetNickname && u.roomId === caller.roomId
+        (u) => u.nickname.toLowerCase() === targetNickname.toLowerCase()
       );
       if (target) {
         io.to(target.socketId).emit("private_call_incoming", { fromNickname: caller.nickname });
       } else {
-        socket.emit("private_call_rejected", { fromNickname: targetNickname, reason: "User not found" });
+        socket.emit("private_call_rejected", { fromNickname: targetNickname, reason: "User not found or offline" });
       }
     });
 
@@ -504,7 +505,7 @@ export function initSocketServer(httpServer: HttpServer) {
       const accepter = activeUsers.get(socket.id);
       if (!accepter) return;
       const target = Array.from(activeUsers.values()).find(
-        (u) => u.nickname === targetNickname && u.roomId === accepter.roomId
+        (u) => u.nickname.toLowerCase() === targetNickname.toLowerCase()
       );
       if (target) {
         io.to(target.socketId).emit("private_call_accepted", { fromNickname: accepter.nickname });
@@ -515,7 +516,7 @@ export function initSocketServer(httpServer: HttpServer) {
       const rejecter = activeUsers.get(socket.id);
       if (!rejecter) return;
       const target = Array.from(activeUsers.values()).find(
-        (u) => u.nickname === targetNickname && u.roomId === rejecter.roomId
+        (u) => u.nickname.toLowerCase() === targetNickname.toLowerCase()
       );
       if (target) {
         io.to(target.socketId).emit("private_call_rejected", { fromNickname: rejecter.nickname, reason: "Call declined" });
@@ -526,19 +527,19 @@ export function initSocketServer(httpServer: HttpServer) {
       const ender = activeUsers.get(socket.id);
       if (!ender) return;
       const target = Array.from(activeUsers.values()).find(
-        (u) => u.nickname === targetNickname && u.roomId === ender.roomId
+        (u) => u.nickname.toLowerCase() === targetNickname.toLowerCase()
       );
       if (target) {
         io.to(target.socketId).emit("private_call_ended", { fromNickname: ender.nickname });
       }
     });
 
-    // Private WebRTC signaling (separate from room voice)
+    // Private WebRTC signaling (cross-room — no roomId restriction)
     socket.on("private_webrtc_offer", ({ targetNickname, offer }: { targetNickname: string; offer: RTCSessionDescriptionInit }) => {
       const user = activeUsers.get(socket.id);
       if (!user) return;
       const target = Array.from(activeUsers.values()).find(
-        (u) => u.nickname === targetNickname && u.roomId === user.roomId
+        (u) => u.nickname.toLowerCase() === targetNickname.toLowerCase()
       );
       if (target) {
         io.to(target.socketId).emit("private_webrtc_offer", { fromNickname: user.nickname, offer });
@@ -549,7 +550,7 @@ export function initSocketServer(httpServer: HttpServer) {
       const user = activeUsers.get(socket.id);
       if (!user) return;
       const target = Array.from(activeUsers.values()).find(
-        (u) => u.nickname === targetNickname && u.roomId === user.roomId
+        (u) => u.nickname.toLowerCase() === targetNickname.toLowerCase()
       );
       if (target) {
         io.to(target.socketId).emit("private_webrtc_answer", { fromNickname: user.nickname, answer });
@@ -560,7 +561,7 @@ export function initSocketServer(httpServer: HttpServer) {
       const user = activeUsers.get(socket.id);
       if (!user) return;
       const target = Array.from(activeUsers.values()).find(
-        (u) => u.nickname === targetNickname && u.roomId === user.roomId
+        (u) => u.nickname.toLowerCase() === targetNickname.toLowerCase()
       );
       if (target) {
         io.to(target.socketId).emit("private_webrtc_ice", { fromNickname: user.nickname, candidate });

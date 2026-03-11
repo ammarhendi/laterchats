@@ -10,12 +10,12 @@ import {
   Platform,
   ScrollView,
   Modal,
-  Alert,
   ActivityIndicator,
   Share,
   FlatList,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { crossInfo } from "@/lib/cross-alert";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ScreenContainer } from "@/components/screen-container";
 import { useChat } from "@/lib/chat-context";
@@ -24,6 +24,7 @@ import * as ScreenCapture from "expo-screen-capture";
 import { LinearGradient as ExpoLinearGradient } from "expo-linear-gradient";
 
 const SAVED_NICKNAME_KEY = "@later_saved_nickname";
+const AGE_VERIFIED_KEY = "@later_age_verified";
 const SAVED_REGISTERED_USER_KEY = "@later_registered_user";
 const SAVED_PASSWORD_KEY = "@later_saved_password";
 const SAVED_REMEMBER_KEY = "@later_remember_me";
@@ -94,9 +95,11 @@ export default function WelcomeScreen() {
     joinRoom,
     nickname: currentNickname,
     roomId,
+    setNickname,
   } = useChat();
 
   const [screen, setScreen] = useState<Screen>("auth");
+  const [showAgeVerify, setShowAgeVerify] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("login");
   const [pendingNickname, setPendingNickname] = useState("");
   const [nicknameInput, setNicknameInput] = useState("");
@@ -130,12 +133,24 @@ export default function WelcomeScreen() {
   const { data: roomsData, isLoading: roomsLoading } = trpc.chat.getAllRooms.useQuery(undefined, { retry: 2 });
   const rooms = roomsData && roomsData.length > 0 ? roomsData : FALLBACK_ROOMS;
 
+  // Age verification on first launch
+  useEffect(() => {
+    AsyncStorage.getItem(AGE_VERIFIED_KEY).then((val) => {
+      if (!val) setShowAgeVerify(true);
+    });
+  }, []);
+
+  const handleAgeConfirm = async () => {
+    await AsyncStorage.setItem(AGE_VERIFIED_KEY, "1");
+    setShowAgeVerify(false);
+  };
+
   useEffect(() => {
     let sub: { remove: () => void } | null = null;
     if (Platform.OS !== "web") {
       ScreenCapture.preventScreenCaptureAsync().catch(() => {});
       sub = ScreenCapture.addScreenshotListener(() => {
-        Alert.alert("Screenshot Blocked", "Screenshots are not allowed in Later to protect user privacy.");
+        crossInfo("Screenshot Blocked", "Screenshots are not allowed in Later to protect user privacy.");
       });
     }
     return () => {
@@ -162,10 +177,11 @@ export default function WelcomeScreen() {
 
   const [isMounted, setIsMounted] = useState(false);
   useEffect(() => { setIsMounted(true); }, []);
+  // If already logged in (nickname set), go to Friends tab automatically
   useEffect(() => {
     if (!isMounted) return;
-    if (currentNickname && roomId) router.replace("/chat" as any);
-  }, [currentNickname, roomId, isMounted]);
+    if (currentNickname) router.replace("/(tabs)/friends" as any);
+  }, [currentNickname, isMounted]);
 
   const handleGuestJoin = () => {
     const nick = nicknameInput.trim();
@@ -174,8 +190,8 @@ export default function WelcomeScreen() {
     if (SUPER_ADMIN_NICKNAMES.some(n => n.toLowerCase() === nick.toLowerCase())) { setError("This nickname is reserved."); return; }
     setError("");
     AsyncStorage.setItem(SAVED_NICKNAME_KEY, nick).catch(() => {});
-    setPendingNickname(nick);
-    setScreen("rooms");
+    setNickname(nick);
+    router.replace("/(tabs)/friends" as any);
   };
 
   const handleLogin = async () => {
@@ -195,8 +211,9 @@ export default function WelcomeScreen() {
           AsyncStorage.removeItem(SAVED_REMEMBER_KEY).catch(() => {});
           AsyncStorage.removeItem(SAVED_PASSWORD_KEY).catch(() => {});
         }
-        setPendingNickname(username);
-        setScreen("rooms");
+        // Set nickname in context and go directly to Friends (buddy list) — Yahoo Messenger style
+        setNickname(username);
+        router.replace("/(tabs)/friends" as any);
       } else {
         setError(result.error || "Login failed");
       }
@@ -218,8 +235,9 @@ export default function WelcomeScreen() {
       const result = await registerMutation.mutateAsync({ username, email: regEmail.trim(), password: regPassword, dateOfBirth: regDob });
       if (result.success) {
         AsyncStorage.setItem(SAVED_REGISTERED_USER_KEY, username).catch(() => {});
-        setPendingNickname(username);
-        setScreen("rooms");
+        // Set nickname in context and go directly to Friends (buddy list) — Yahoo Messenger style
+        setNickname(username);
+        router.replace("/(tabs)/friends" as any);
       } else {
         setError(result.error || "Registration failed");
       }
@@ -488,6 +506,20 @@ export default function WelcomeScreen() {
                 <TouchableOpacity onPress={() => { setActiveTab("login"); setError(""); }} style={styles.ymLinkBtn}>
                   <Text style={styles.ymLinkText}>Already have an account? Sign In</Text>
                 </TouchableOpacity>
+
+                {/* Privacy & Terms links — required for App Store */}
+                <View style={{ alignItems: "center", gap: 4, paddingTop: 4 }}>
+                  <Text style={styles.ymFooterText}>By creating an account, you agree to our</Text>
+                  <View style={{ flexDirection: "row", gap: 8 }}>
+                    <TouchableOpacity onPress={() => router.push("/terms-of-service" as any)}>
+                      <Text style={[styles.ymLinkText, { fontSize: 12 }]}>Terms of Service</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.ymFooterText}>and</Text>
+                    <TouchableOpacity onPress={() => router.push("/privacy-policy" as any)}>
+                      <Text style={[styles.ymLinkText, { fontSize: 12 }]}>Privacy Policy</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
               </View>
             )}
 
@@ -573,6 +605,38 @@ export default function WelcomeScreen() {
               <TouchableOpacity style={styles.ymLinkBtn} onPress={() => { setShowForgotPassword(false); setForgotStep("email"); setForgotMsg(""); }}>
                 <Text style={styles.ymLinkText}>Close</Text>
               </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Age Verification Modal — shown on first launch */}
+      <Modal visible={showAgeVerify} transparent animationType="fade" onRequestClose={() => {}}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalBox, { maxWidth: 320 }]}>
+            <ExpoLinearGradient colors={[YM.purpleDark, YM.purple]} style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Age Verification</Text>
+            </ExpoLinearGradient>
+            <View style={styles.modalBody}>
+              <Text style={{ fontSize: 40, textAlign: "center", marginBottom: 8 }}>🔞</Text>
+              <Text style={[styles.modalSubtitle, { textAlign: "center", fontWeight: "700", fontSize: 16, color: YM.text }]}>
+                Later! is for adults only
+              </Text>
+              <Text style={[styles.modalSubtitle, { textAlign: "center", marginTop: 8 }]}>
+                By continuing, you confirm that you are 18 years of age or older and agree to our Terms of Service and Privacy Policy.
+              </Text>
+              <TouchableOpacity style={[styles.ymSignInBtn, { marginTop: 16 }]} onPress={handleAgeConfirm} activeOpacity={0.85}>
+                <Text style={styles.ymSignInBtnText}>I am 18 or older — Continue</Text>
+              </TouchableOpacity>
+              <View style={{ flexDirection: "row", justifyContent: "center", gap: 8, marginTop: 10 }}>
+                <TouchableOpacity onPress={() => router.push("/terms-of-service" as any)}>
+                  <Text style={[styles.ymLinkText, { fontSize: 12 }]}>Terms of Service</Text>
+                </TouchableOpacity>
+                <Text style={styles.ymFooterText}>·</Text>
+                <TouchableOpacity onPress={() => router.push("/privacy-policy" as any)}>
+                  <Text style={[styles.ymLinkText, { fontSize: 12 }]}>Privacy Policy</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </View>

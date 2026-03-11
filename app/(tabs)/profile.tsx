@@ -7,12 +7,12 @@ import {
   TouchableOpacity,
   StyleSheet,
   Image,
-  Alert,
   ActivityIndicator,
   ScrollView,
   Platform,
 } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
+import { crossInfo, crossConfirm } from "@/lib/cross-alert";
 import { trpc } from "@/lib/trpc";
 import { useChat } from "@/lib/chat-context";
 import { router } from "expo-router";
@@ -82,46 +82,16 @@ export default function ProfileScreen() {
 
   const handlePickProfileVideo = async () => {
     if (!username) return;
-    Alert.alert(
-      "Profile Video",
-      "Choose a short video (max 10 seconds) from your gallery or record a new one.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Pick from Gallery",
-          onPress: async () => {
-            const result = await ImagePicker.launchImageLibraryAsync({
-              mediaTypes: ImagePicker.MediaTypeOptions.Videos,
-              allowsEditing: true,
-              videoMaxDuration: 10,
-              quality: ImagePicker.UIImagePickerControllerQualityType.Medium,
-            });
-            if (!result.canceled && result.assets[0]) {
-              await uploadProfileVideo(result.assets[0].uri, result.assets[0].mimeType || "video/mp4");
-            }
-          },
-        },
-        {
-          text: "Record Video",
-          onPress: async () => {
-            const { status } = await ImagePicker.requestCameraPermissionsAsync();
-            if (status !== "granted") {
-              Alert.alert("Permission Required", "Camera permission is required to record video.");
-              return;
-            }
-            const result = await ImagePicker.launchCameraAsync({
-              mediaTypes: ImagePicker.MediaTypeOptions.Videos,
-              allowsEditing: true,
-              videoMaxDuration: 10,
-              quality: ImagePicker.UIImagePickerControllerQualityType.Medium,
-            });
-            if (!result.canceled && result.assets[0]) {
-              await uploadProfileVideo(result.assets[0].uri, result.assets[0].mimeType || "video/mp4");
-            }
-          },
-        },
-      ]
-    );
+    // Pick from gallery directly (simpler cross-platform approach)
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+      allowsEditing: true,
+      videoMaxDuration: 10,
+      quality: ImagePicker.UIImagePickerControllerQualityType.Medium,
+    });
+    if (!result.canceled && result.assets[0]) {
+      await uploadProfileVideo(result.assets[0].uri, result.assets[0].mimeType || "video/mp4");
+    }
   };
 
   const uploadProfileVideo = async (uri: string, mimeType: string) => {
@@ -147,12 +117,12 @@ export default function ProfileScreen() {
         // Also persist in AsyncStorage for offline access
         AsyncStorage.setItem(`later_profile_video_${username.toLowerCase()}`, data.url).catch(() => {});
         refetch();
-        Alert.alert("Success", "Profile video updated! It will loop on your profile.");
+        crossInfo("Success", "Profile video updated! It will loop on your profile.");
       } else {
-        Alert.alert("Upload Failed", data.error || "Could not upload video.");
+        crossInfo("Upload Failed", data.error || "Could not upload video.");
       }
     } catch (err) {
-      Alert.alert("Upload Failed", "Could not upload video. Please try again.");
+      crossInfo("Upload Failed", "Could not upload video. Please try again.");
     }
     setUploadingVideo(false);
   };
@@ -163,7 +133,7 @@ export default function ProfileScreen() {
     if (Platform.OS !== "web") {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert("Permission Required", "Please allow access to your photo library.");
+        crossInfo("Permission Required", "Please allow access to your photo library.");
         return;
       }
     }
@@ -211,13 +181,13 @@ export default function ProfileScreen() {
           avatarUrl: data.url,
         });
         refetch();
-        Alert.alert("Success", "Profile picture updated!");
+        crossInfo("Success", "Profile picture updated!");
       } else {
-        Alert.alert("Upload Failed", data.error || "Could not upload image.");
+        crossInfo("Upload Failed", data.error || "Could not upload image.");
       }
     } catch (err) {
       console.error("Upload error:", err);
-      Alert.alert("Upload Failed", "Could not upload image. Please try again.");
+      crossInfo("Upload Failed", "Could not upload image. Please try again.");
     }
     setUploading(false);
   };
@@ -235,7 +205,7 @@ export default function ProfileScreen() {
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch {
-      Alert.alert("Error", "Could not save profile.");
+      crossInfo("Error", "Could not save profile.");
     }
     setSaving(false);
   };
@@ -250,7 +220,7 @@ export default function ProfileScreen() {
     try {
       const result = await changePasswordMutation.mutateAsync({ username, currentPassword: currentPwd, newPassword: newPwd });
       if (result.success) {
-        Alert.alert("Password Changed", "Your password has been updated successfully.");
+        crossInfo("Password Changed", "Your password has been updated successfully.");
         setCurrentPwd(""); setNewPwd(""); setConfirmPwd("");
         setShowChangePwd(false);
       } else {
@@ -262,22 +232,12 @@ export default function ProfileScreen() {
     setPwdSaving(false);
   };
 
-  const handleSignOut = () => {
-    Alert.alert(
-      "Sign Out",
-      "Are you sure you want to sign out?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Sign Out",
-          style: "destructive",
-          onPress: () => {
-            leaveRoom();
-            router.replace("/" as any);
-          },
-        },
-      ]
-    );
+  const handleSignOut = async () => {
+    const ok = await crossConfirm("Sign Out", "Are you sure you want to sign out?", "Sign Out", "Cancel");
+    if (ok) {
+      leaveRoom();
+      router.replace("/" as any);
+    }
   };
 
   if (!username) {
@@ -520,6 +480,16 @@ export default function ProfileScreen() {
           <Text style={styles.appInfoText}>© {new Date().getFullYear()} Later. All rights reserved.</Text>
           <Text style={styles.appInfoSub}>Later is a registered trademark. Unauthorized reproduction or distribution of this application, or any portion of it, may result in severe civil and criminal penalties.</Text>
           <Text style={[styles.appInfoSub, { marginTop: 4 }]}>18+ only · All conversations are fully secured &amp; private</Text>
+          {/* Legal links — required for App Store */}
+          <View style={{ flexDirection: "row", gap: 16, marginTop: 12, justifyContent: "center" }}>
+            <TouchableOpacity onPress={() => router.push("/terms-of-service" as any)}>
+              <Text style={{ color: "#7B1FA2", fontSize: 12, fontWeight: "600" }}>Terms of Service</Text>
+            </TouchableOpacity>
+            <Text style={styles.appInfoSub}>·</Text>
+            <TouchableOpacity onPress={() => router.push("/privacy-policy" as any)}>
+              <Text style={{ color: "#7B1FA2", fontSize: 12, fontWeight: "600" }}>Privacy Policy</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </ScrollView>
     </ScreenContainer>

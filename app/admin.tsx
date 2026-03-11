@@ -5,12 +5,12 @@ import {
   TouchableOpacity,
   StyleSheet,
   Share,
-  Alert,
   ScrollView,
   Platform,
   TextInput,
   FlatList,
 } from "react-native";
+import { crossAlert, crossInfo, crossConfirm } from "@/lib/cross-alert";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { trpc } from "@/lib/trpc";
@@ -87,7 +87,7 @@ export default function AdminScreen() {
       setGeneratedExpiry(new Date(data.expiresAt));
     },
     onError: (err) => {
-      Alert.alert("Error", err.message || "Failed to generate invite link.");
+      crossInfo("Error", err.message || "Failed to generate invite link.");
     },
   });
 
@@ -119,60 +119,40 @@ export default function AdminScreen() {
     }
   };
 
-  const handleKick = (target: string) => {
-    Alert.alert("Kick User", `Kick ${target} from the room?`, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Kick", style: "destructive", onPress: () => kickUser(target) },
-    ]);
+  const handleKick = async (target: string) => {
+    const ok = await crossConfirm("Kick User", `Kick ${target} from the room?`, "Kick", "Cancel");
+    if (ok) kickUser(target);
   };
 
-  const handleBan = (target: string, voiceOnly = false) => {
-    Alert.alert(
-      voiceOnly ? "Voice Ban" : "Ban User",
-      voiceOnly
-        ? `Voice-ban ${target}? They can still text but cannot use the mic.`
-        : `Permanently ban ${target}?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: voiceOnly ? "Voice Ban" : "Ban",
-          style: "destructive",
-          onPress: () => banUser(target, banReason || undefined, voiceOnly),
-        },
-      ]
-    );
+  const handleBan = async (target: string, voiceOnly = false) => {
+    const msg = voiceOnly
+      ? `Voice-ban ${target}? They can still text but cannot use the mic.`
+      : `Permanently ban ${target}?`;
+    const ok = await crossConfirm(voiceOnly ? "Voice Ban" : "Ban User", msg, voiceOnly ? "Voice Ban" : "Ban", "Cancel");
+    if (ok) banUser(target, banReason || undefined, voiceOnly);
   };
 
-  const handlePromote = (target: string) => {
-    Alert.alert("Promote to Moderator", `Promote ${target} to Moderator?`, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Promote", onPress: () => promoteUser(target) },
-    ]);
+  const handlePromote = async (target: string) => {
+    const ok = await crossConfirm("Promote to Moderator", `Promote ${target} to Moderator?`, "Promote", "Cancel");
+    if (ok) promoteUser(target);
   };
 
-  const handleDemote = (target: string) => {
-    Alert.alert("Demote Moderator", `Remove moderator role from ${target}?`, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Demote", style: "destructive", onPress: () => demoteUser(target) },
-    ]);
+  const handleDemote = async (target: string) => {
+    const ok = await crossConfirm("Demote Moderator", `Remove moderator role from ${target}?`, "Demote", "Cancel");
+    if (ok) demoteUser(target);
   };
 
   const handleMuteText = (target: string, isMuted: boolean) => {
     if (isMuted) {
       unmuteUserText(target);
     } else {
-      Alert.alert("Mute User", `Prevent ${target} from sending text messages?`, [
-        { text: "Cancel", style: "cancel" },
-        { text: "Mute", style: "destructive", onPress: () => muteUserText(target) },
-      ]);
+      crossConfirm("Mute User", `Prevent ${target} from sending text messages?`, "Mute", "Cancel").then((ok) => { if (ok) muteUserText(target); });
     }
   };
 
-  const handleUnban = (target: string) => {
-    Alert.alert("Unban", `Remove ban for ${target}?`, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Unban", onPress: () => unbanUser(target) },
-    ]);
+  const handleUnban = async (target: string) => {
+    const ok = await crossConfirm("Unban", `Remove ban for ${target}?`, "Unban", "Cancel");
+    if (ok) unbanUser(target);
   };
 
   const currentToken = generatedToken || latestInviteQuery.data?.token;
@@ -242,10 +222,7 @@ export default function AdminScreen() {
                 <TouchableOpacity
                   style={[styles.quickBtn, styles.quickBtnDanger]}
                   onPress={() =>
-                    Alert.alert("Clear Chat", "Wipe all messages for everyone?", [
-                      { text: "Cancel", style: "cancel" },
-                      { text: "Clear", style: "destructive", onPress: () => { clearAllMessages(); Alert.alert("Done", "Chat cleared."); } },
-                    ])
+                    crossConfirm("Clear Chat", "Wipe all messages for everyone?", "Clear", "Cancel").then((ok) => { if (ok) { clearAllMessages(); crossInfo("Done", "Chat cleared."); } })
                   }
                 >
                   <Text style={styles.quickBtnText}>🗑️ Clear Chat</Text>
@@ -427,10 +404,7 @@ export default function AdminScreen() {
               <TouchableOpacity
                 style={[styles.quickBtn, styles.quickBtnDanger]}
                 onPress={() =>
-                  Alert.alert("Clear Chat", "Wipe all messages for everyone in this room?", [
-                    { text: "Cancel", style: "cancel" },
-                    { text: "Clear", style: "destructive", onPress: () => { clearAllMessages(); Alert.alert("Done", "Chat cleared."); } },
-                  ])
+                  crossConfirm("Clear Chat", "Wipe all messages for everyone in this room?", "Clear", "Cancel").then((ok) => { if (ok) { clearAllMessages(); crossInfo("Done", "Chat cleared."); } })
                 }
               >
                 <Text style={styles.quickBtnText}>🗑️ Clear Chat Room</Text>

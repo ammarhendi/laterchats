@@ -7,11 +7,10 @@ import { useChat } from "@/lib/chat-context";
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
-  // On devices with a home indicator (iPhone X+), add safe area at the bottom
   const safeBottom = Platform.OS === "ios" ? insets.bottom : 0;
 
   // Get unread counts for badges
-  const { unreadPMs, pendingFriendRequests } = useChat();
+  const { unreadPMs, pendingFriendRequests, nickname } = useChat();
   const totalUnreadPMs = Object.values(unreadPMs).reduce((sum, n) => sum + n, 0);
 
   return (
@@ -27,7 +26,6 @@ export default function TabLayout() {
           borderTopWidth: 1,
           paddingTop: 6,
           paddingBottom: safeBottom > 0 ? safeBottom : 8,
-          // No fixed height — let the tab bar size itself based on content
         },
         tabBarLabelStyle: {
           fontSize: 11,
@@ -37,16 +35,7 @@ export default function TabLayout() {
         },
       }}
     >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: "Chat Rooms",
-          tabBarIcon: ({ color }) => (
-            <IconSymbol size={24} name="message.fill" color={color} />
-          ),
-          tabBarBadge: totalUnreadPMs > 0 ? totalUnreadPMs : undefined,
-        }}
-      />
+      {/* Friends tab is the home screen (Yahoo Messenger buddy list) */}
       <Tabs.Screen
         name="friends"
         options={{
@@ -57,6 +46,18 @@ export default function TabLayout() {
           tabBarBadge: pendingFriendRequests > 0 ? pendingFriendRequests : undefined,
         }}
       />
+      {/* Login/Sign-in tab — hidden from tab bar when logged in */}
+      <Tabs.Screen
+        name="index"
+        options={{
+          title: "Sign In",
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={24} name="house.fill" color={color} />
+          ),
+          // Hide the tab when logged in — users access login by signing out from Profile
+          tabBarItemStyle: nickname ? { display: "none" } : undefined,
+        }}
+      />
       <Tabs.Screen
         name="profile"
         options={{
@@ -64,6 +65,7 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => (
             <IconSymbol size={24} name="person.crop.circle" color={color} />
           ),
+          tabBarBadge: totalUnreadPMs > 0 ? totalUnreadPMs : undefined,
         }}
       />
     </Tabs>

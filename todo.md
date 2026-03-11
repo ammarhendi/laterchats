@@ -196,3 +196,35 @@
 - [x] Fix "Clear My View" button not working for regular users (non-admin)
 - [x] Fix PM delivery: private messages not being received by the other user
 - [x] Auto-open PM conversation window when a new PM arrives (like Messenger popup)
+
+## App Store Preparation
+- [ ] Fix Alert.alert calls that don't work on web (use cross-platform modal instead)
+- [ ] Fix text node errors (bare text in View components)
+- [ ] Add Privacy Policy screen (required by Apple)
+- [ ] Add Terms of Service screen (required by Apple)
+- [ ] Add age verification / 18+ confirmation on first launch
+- [ ] Add proper onboarding flow for new users
+- [ ] Polish empty states (no messages, no friends, no rooms)
+- [ ] Add loading states for all async operations
+- [ ] Verify app icon and splash screen look correct on all iPhone sizes
+- [ ] Add "Forgot Password" flow (currently shows but does nothing)
+- [ ] Add "Get a new Later! ID" registration flow completion check
+- [ ] Verify push notifications work on real device
+- [ ] App Store metadata: description, keywords, screenshots
+- [ ] Privacy policy URL for App Store listing
+- [ ] Fix Secret Mode sync: when one user turns on Secret Mode, the other user should see it automatically
+- [ ] Fix private voice calls to work cross-room (not just within the same room)
+- [ ] Full PM end-to-end test and fix all delivery bugs
+- [ ] Redesign login flow: after sign-in go directly to Friends tab (Yahoo Messenger buddy list), not room list
+- [ ] Add "Chat Rooms" button on Friends screen to browse and join rooms
+- [ ] Room list becomes secondary screen accessed from Friends tab
+
+## Yahoo Messenger Rebuild (March 2026)
+- [ ] Rebuild login screen: pure YM style, sign in goes directly to buddy list
+- [ ] Buddy list IS the home screen (Friends tab = tab 1, first thing you see after login)
+- [ ] Buddy list: Online group at top, Offline below, status icons, click friend opens PM window
+- [ ] Chat Rooms button in buddy list header/menu (not a separate tab)
+- [ ] Tab order: Friends (home) → Chat Rooms → Profile
+- [ ] Fix PM delivery end-to-end
+- [ ] Secret Mode sync: both users see when secret mode is active
+- [ ] Cross-room voice calls

@@ -2,8 +2,8 @@ import React, { createContext, useContext, useEffect, useRef, useState, useCallb
 import { io, Socket } from "socket.io-client";
 import { getApiBaseUrl } from "@/constants/oauth";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Alert } from "react-native";
 import { getOrCreateKeyPair, registerPublicKey, getPublicKey, encryptMessage, decryptMessage, clearPublicKeyRegistry } from "@/lib/e2ee";
+import { crossAlert, crossInfo } from "@/lib/cross-alert";
 
 export type UserRole = "super_admin" | "moderator" | "user";
 
@@ -21,9 +21,11 @@ export interface ChatMessage {
   roomId: number;
   senderNickname: string;
   content: string;
+  rawContent?: string; // original encrypted content for retry decryption
   type: "public" | "private" | "system";
   recipientNickname?: string | null;
   createdAt: Date | string;
+  isOffline?: boolean;
 }
 
 interface ChatContextType {
@@ -152,8 +154,29 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     });
 
     // Receive other users' public keys for E2EE
-    sock.on("public_key_broadcast", ({ nickname: keyOwner, publicKeyJwk }: { nickname: string; publicKeyJwk: string }) => {
+    sock.on("public_key_broadcast", async ({ nickname: keyOwner, publicKeyJwk }: { nickname: string; publicKeyJwk: string }) => {
       registerPublicKey(keyOwner, publicKeyJwk);
+      // Retry decryption for messages that couldn't be decrypted earlier (key wasn't available)
+      setPrivateMessages((prev) => {
+        const conv = prev[keyOwner];
+        if (!conv) return prev;
+        const needsRetry = conv.some((m) => m.content === "[Encrypted message]" && m.rawContent?.startsWith("e2ee:"));
+        if (!needsRetry) return prev;
+        // Schedule async retry outside setState
+        const pubKey = getPublicKey(keyOwner);
+        if (!pubKey) return prev;
+        Promise.all(
+          conv.map(async (m) => {
+            if (m.content !== "[Encrypted message]" || !m.rawContent?.startsWith("e2ee:")) return m;
+            const encrypted = m.rawContent.slice(5);
+            const decrypted = await decryptMessage(encrypted, pubKey);
+            return decrypted ? { ...m, content: decrypted } : m;
+          })
+        ).then((updated) => {
+          setPrivateMessages((p) => ({ ...p, [keyOwner]: updated }));
+        });
+        return prev; // return unchanged for now; async update will follow
+      });
     });
 
     sock.on("message_history", (history: ChatMessage[]) => {
@@ -175,6 +198,13 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           ? (msg.recipientNickname ?? msg.senderNickname)
           : msg.senderNickname;
 
+      // Deduplicate: skip if we already have this message id in this conversation
+      setPrivateMessages((prev) => {
+        const existing = prev[otherNickname] || [];
+        if (existing.some((m) => m.id === msg.id)) return prev; // already have it
+        return prev; // will be set after decryption below
+      });
+
       // Attempt E2EE decryption if message starts with the encrypted prefix
       let displayContent = msg.content;
       if (msg.content.startsWith("e2ee:")) {
@@ -183,27 +213,40 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         if (senderKey) {
           const decrypted = await decryptMessage(encryptedPart, senderKey);
           if (decrypted) displayContent = decrypted;
+          else displayContent = "[Encrypted message]"; // graceful fallback
+        } else {
+          displayContent = "[Encrypted message]"; // key not yet available
         }
       }
 
-      const displayMsg = { ...msg, content: displayContent, createdAt: new Date(msg.createdAt) };
+      // Store rawContent so we can retry decryption later if key wasn't available
+      const displayMsg = {
+        ...msg,
+        content: displayContent,
+        rawContent: msg.content, // preserve original for retry
+        createdAt: new Date(msg.createdAt),
+      };
 
-      setPrivateMessages((prev) => ({
-        ...prev,
-        [otherNickname]: [
-          ...(prev[otherNickname] || []),
-          displayMsg,
-        ],
-      }));
+      setPrivateMessages((prev) => {
+        const existing = prev[otherNickname] || [];
+        // Deduplicate by message id
+        if (existing.some((m) => m.id === msg.id)) return prev;
+        return {
+          ...prev,
+          [otherNickname]: [...existing, displayMsg],
+        };
+      });
 
       if (msg.senderNickname !== myNick) {
         setUnreadPMs((prev) => ({
           ...prev,
           [msg.senderNickname]: (prev[msg.senderNickname] || 0) + 1,
         }));
+        // Show a clean preview (no e2ee: prefix)
+        const previewText = displayContent.startsWith("e2ee:") ? "[Encrypted message]" : displayContent;
         setIncomingPM({
           from: msg.senderNickname,
-          preview: displayContent.length > 40 ? displayContent.slice(0, 40) + "..." : displayContent,
+          preview: previewText.length > 40 ? previewText.slice(0, 40) + "..." : previewText,
         });
         setTimeout(() => setIncomingPM(null), 5000);
       }
@@ -228,16 +271,15 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     });
 
     sock.on("offline_pms_delivered", ({ count }: { count: number }) => {
-      Alert.alert(
+      crossInfo(
         "📬 Missed Messages",
-        `You have ${count} private message${count === 1 ? "" : "s"} that arrived while you were offline.`,
-        [{ text: "OK" }]
+        `You have ${count} private message${count === 1 ? "" : "s"} that arrived while you were offline.`
       );
     });
 
     // Admin events
     sock.on("kicked", ({ reason }: { reason: string }) => {
-      Alert.alert("Kicked", reason);
+      crossInfo("Kicked", reason);
       socketRef.current?.disconnect();
       socketRef.current = null;
       setSocket(null);
@@ -252,26 +294,26 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     sock.on("voice_banned", ({ message }: { message: string }) => {
       setIsVoiceBanned(true);
       setIsMuted(true);
-      Alert.alert("Voice Banned", message);
+      crossInfo("Voice Banned", message);
     });
 
     sock.on("text_muted", ({ message }: { message: string }) => {
       setIsTextMuted(true);
-      Alert.alert("Muted", message);
+      crossInfo("Muted", message);
     });
 
     sock.on("text_unmuted", ({ message }: { message: string }) => {
       setIsTextMuted(false);
-      Alert.alert("Unmuted", message);
+      crossInfo("Unmuted", message);
     });
 
     sock.on("role_updated", ({ role, message }: { role: UserRole; message: string }) => {
       setMyRole(role);
-      Alert.alert("Role Updated", message);
+      crossInfo("Role Updated", message);
     });
 
     sock.on("admin_action_result", ({ success, message }: { success: boolean; message: string }) => {
-      Alert.alert(success ? "Success" : "Error", message);
+      crossInfo(success ? "✓ Success" : "Error", message);
     });
 
     sock.on("admin_banned_list", (list: ChatContextType["bannedList"]) => {
@@ -283,7 +325,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     });
     // ── Room Invite ────────────────────────────────────────────────────────────
     sock.on("room_invite", ({ fromNickname, roomId: inviteRoomId, roomName: inviteRoomName }: { fromNickname: string; roomId: number; roomName: string }) => {
-      Alert.alert(
+      crossAlert(
         "📨 Room Invitation",
         `${fromNickname} has invited you to join "${inviteRoomName}". Would you like to join?`,
         [
@@ -303,13 +345,13 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       );
     });
     sock.on("invite_sent", ({ targetNickname, roomName: inviteRoomName }: { targetNickname: string; roomName: string }) => {
-      Alert.alert("Invitation Sent", `Invitation sent to ${targetNickname} to join "${inviteRoomName}"!`);
+      crossInfo("Invitation Sent", `Invitation sent to ${targetNickname} to join "${inviteRoomName}"!`);
     });
     sock.on("invite_response_result", ({ fromNickname, accepted }: { fromNickname: string; accepted: boolean }) => {
       if (accepted) {
-        Alert.alert("Invitation Accepted", `${fromNickname} accepted your invitation and joined the room!`);
+        crossInfo("Invitation Accepted", `${fromNickname} accepted your invitation and joined the room!`);
       } else {
-        Alert.alert("Invitation Declined", `${fromNickname} declined your invitation.`);
+        crossInfo("Invitation Declined", `${fromNickname} declined your invitation.`);
       }
     });
 
@@ -441,7 +483,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const clearAllMessages = useCallback(() => {
     const sock = socketRef.current;
     if (!sock || !sock.connected) {
-      Alert.alert("Error", "Not connected to server. Please wait for reconnection.");
+      crossInfo("Error", "Not connected to server. Please wait for reconnection.");
       return;
     }
     // Optimistically clear local messages immediately

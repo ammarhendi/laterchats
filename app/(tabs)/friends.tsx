@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   TextInput,
   StyleSheet,
-  Alert,
   Image,
   ActivityIndicator,
   Modal,
@@ -15,10 +14,12 @@ import {
   RefreshControl,
 } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
+import { crossInfo, crossConfirm } from "@/lib/cross-alert";
 import { trpc } from "@/lib/trpc";
 import { useChat } from "@/lib/chat-context";
 import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
+import { ScrollView } from "react-native";
 
 const YM_PURPLE = "#7B0099";
 const YM_PURPLE_DARK = "#5A0070";
@@ -45,8 +46,16 @@ function FriendAvatar({ username, avatarUrl, size = 44 }: { username: string; av
   );
 }
 
+const FALLBACK_ROOMS = [
+  { id: 1, name: "Later! Lobby", description: "Main public chat room" },
+  { id: 2, name: "Music & Vibes", description: "Talk about music" },
+  { id: 3, name: "Sports Talk", description: "Sports discussion" },
+  { id: 4, name: "Night Owls", description: "Late night chat" },
+  { id: 5, name: "Chill Zone", description: "Relax and chat" },
+];
+
 export default function FriendsScreen() {
-  const { nickname, pendingFriendRequests, dismissFriendRequest } = useChat();
+  const { nickname, pendingFriendRequests, dismissFriendRequest, joinRoom } = useChat();
 
   // Reset the badge when the user views the Friends screen
   useEffect(() => {
@@ -60,6 +69,23 @@ export default function FriendsScreen() {
   const [addUsername, setAddUsername] = useState("");
   const [addLoading, setAddLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [roomsModalVisible, setRoomsModalVisible] = useState(false);
+  const [joiningRoomId, setJoiningRoomId] = useState<number | null>(null);
+
+  const { data: roomsData, isLoading: roomsLoading } = trpc.chat.getAllRooms.useQuery(undefined, { retry: 2 });
+  const rooms = roomsData && roomsData.length > 0 ? roomsData : FALLBACK_ROOMS;
+
+  const handleJoinRoom = (roomId: number) => {
+    if (!nickname) return;
+    setJoiningRoomId(roomId);
+    joinRoom(nickname, roomId);
+    setRoomsModalVisible(false);
+    // Navigation to chat happens automatically via useEffect in chat-context when roomId is set
+    setTimeout(() => {
+      router.push("/chat" as any);
+      setJoiningRoomId(null);
+    }, 800);
+  };
 
   const username = nickname || "";
 
@@ -87,15 +113,15 @@ export default function FriendsScreen() {
         recipientUsername: addUsername.trim(),
       });
       if (result.success) {
-        Alert.alert("Friend Request Sent", `A friend request has been sent to ${addUsername.trim()}.`);
+        crossInfo("Friend Request Sent", `A friend request has been sent to ${addUsername.trim()}.`);
         setAddUsername("");
         setAddModalVisible(false);
         refetch();
       } else {
-        Alert.alert("Error", result.error || "Could not send friend request.");
+        crossInfo("Error", result.error || "Could not send friend request.");
       }
     } catch {
-      Alert.alert("Error", "Could not send friend request.");
+      crossInfo("Error", "Could not send friend request.");
     }
     setAddLoading(false);
   };
@@ -111,16 +137,12 @@ export default function FriendsScreen() {
     refetch();
   };
 
-  const handleRemove = (friendUsername: string) => {
-    Alert.alert("Remove Friend", `Remove ${friendUsername} from your friends?`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Remove", style: "destructive", onPress: async () => {
-          await removeMutation.mutateAsync({ username, friendUsername });
-          refetch();
-        }
-      },
-    ]);
+  const handleRemove = async (friendUsername: string) => {
+    const ok = await crossConfirm("Remove Friend", `Remove ${friendUsername} from your friends?`, "Remove", "Cancel");
+    if (ok) {
+      await removeMutation.mutateAsync({ username, friendUsername });
+      refetch();
+    }
   };
 
   if (!username) {
@@ -128,7 +150,7 @@ export default function FriendsScreen() {
       <ScreenContainer>
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyTitle}>Sign in to see your friends</Text>
-          <TouchableOpacity style={styles.signInBtn} onPress={() => router.replace("/")}>
+          <TouchableOpacity style={styles.signInBtn} onPress={() => router.replace("/(tabs)/index" as any)}>
             <Text style={styles.signInBtnText}>Sign In</Text>
           </TouchableOpacity>
         </View>
@@ -152,12 +174,20 @@ export default function FriendsScreen() {
             <Text style={[styles.headerLogoText, { color: YM_GOLD }]}>!</Text>
             <Text style={[styles.headerLogoText, { color: "rgba(255,255,255,0.7)", fontSize: 13, fontWeight: "400" }]}> Friends</Text>
           </View>
-          <TouchableOpacity
-            style={styles.addBtn}
-            onPress={() => setAddModalVisible(true)}
-          >
-            <Text style={styles.addBtnText}>+ Add</Text>
-          </TouchableOpacity>
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <TouchableOpacity
+              style={[styles.addBtn, { backgroundColor: "rgba(255,255,255,0.2)" }]}
+              onPress={() => setRoomsModalVisible(true)}
+            >
+              <Text style={[styles.addBtnText, { color: "#fff" }]}>💬 Rooms</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.addBtn}
+              onPress={() => setAddModalVisible(true)}
+            >
+              <Text style={styles.addBtnText}>+ Add</Text>
+            </TouchableOpacity>
+          </View>
         </View>
         {/* My status row */}
         <View style={styles.headerMyStatus}>
@@ -290,6 +320,47 @@ export default function FriendsScreen() {
           contentContainerStyle={{ paddingBottom: 32 }}
         />
       )}
+
+      {/* Chat Rooms Modal */}
+      <Modal visible={roomsModalVisible} transparent animationType="slide" onRequestClose={() => setRoomsModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalBox, { maxHeight: "80%", padding: 0, overflow: "hidden" }]}>
+            <View style={[styles.roomsModalHeader, { backgroundColor: YM_PURPLE, padding: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }]}>
+              <Text style={{ color: "#fff", fontWeight: "800", fontSize: 17 }}>Chat Rooms</Text>
+              <TouchableOpacity onPress={() => setRoomsModalVisible(false)}>
+                <Text style={{ color: "#FFD700", fontWeight: "bold", fontSize: 16 }}>✕ Close</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 16 }}>
+              {roomsLoading ? (
+                <ActivityIndicator color={YM_PURPLE} style={{ marginTop: 24 }} />
+              ) : (
+                rooms.map((room: any) => (
+                  <TouchableOpacity
+                    key={room.id}
+                    style={styles.roomRow}
+                    onPress={() => handleJoinRoom(room.id)}
+                    activeOpacity={0.75}
+                  >
+                    <View style={styles.roomRowIcon}>
+                      <Text style={{ fontSize: 20 }}>💬</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.roomRowName}>{room.name}</Text>
+                      {room.description ? <Text style={styles.roomRowDesc}>{room.description}</Text> : null}
+                    </View>
+                    {joiningRoomId === room.id ? (
+                      <ActivityIndicator color={YM_PURPLE} size="small" />
+                    ) : (
+                      <Text style={styles.roomRowArrow}>›</Text>
+                    )}
+                  </TouchableOpacity>
+                ))
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       {/* Add Friend Modal */}
       <Modal visible={addModalVisible} transparent animationType="slide">
@@ -667,5 +738,43 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.55)",
     fontSize: 10,
     letterSpacing: 0.3,
+  },
+  roomsModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  roomRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+    backgroundColor: "#fff",
+  },
+  roomRowIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#EDE7F6",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  roomRowName: {
+    fontWeight: "700",
+    fontSize: 15,
+    color: "#222",
+  },
+  roomRowDesc: {
+    fontSize: 12,
+    color: "#888",
+    marginTop: 2,
+  },
+  roomRowArrow: {
+    fontSize: 22,
+    color: "#aaa",
+    fontWeight: "300",
   },
 });
