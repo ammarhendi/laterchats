@@ -420,8 +420,8 @@ export function initSocketServer(httpServer: HttpServer) {
             senderNickname: user.nickname,
             content: sanitized,
             type: "public",
-          });
-          savedId = (result[0] as any).insertId || savedId;
+          }).returning({ id: messages.id });
+          savedId = result[0]?.id ?? savedId;
         }
 
         const msg = {
@@ -485,8 +485,8 @@ export function initSocketServer(httpServer: HttpServer) {
             content,
             type: "private",
             recipientNickname,
-          });
-          savedId = (result[0] as any).insertId || savedId;
+          }).returning({ id: messages.id });
+          savedId = result[0]?.id ?? savedId;
         }
 
         const msg = {
