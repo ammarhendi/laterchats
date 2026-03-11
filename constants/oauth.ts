@@ -28,23 +28,29 @@ export const API_BASE_URL = env.apiBaseUrl;
  * Get the API base URL, deriving from current hostname if not set.
  * Metro runs on 8081, API server runs on 3000.
  * URL pattern: https://PORT-sandboxid.region.domain
+ *
+ * IMPORTANT: On web in production, always use window.location.origin so the
+ * app works correctly regardless of which sandbox URL was baked into the bundle.
  */
 export function getApiBaseUrl(): string {
-  // If API_BASE_URL is set, use it
-  if (API_BASE_URL) {
-    return API_BASE_URL.replace(/\/$/, "");
-  }
-
-  // On web, derive from current hostname by replacing port 8081 with 3000
+  // On web, always check window.location first to handle production correctly.
+  // The API_BASE_URL baked into the bundle may be a sandbox dev URL that doesn't
+  // work in production (e.g., https://3000-sandboxid.region.manus.computer).
   if (ReactNative.Platform.OS === "web" && typeof window !== "undefined" && window.location) {
     const { protocol, hostname } = window.location;
-    // Pattern: 8081-sandboxid.region.domain -> 3000-sandboxid.region.domain
+    // Pattern: 8081-sandboxid.region.domain -> 3000-sandboxid.region.domain (dev sandbox)
     const apiHostname = hostname.replace(/^8081-/, "3000-");
     if (apiHostname !== hostname) {
+      // We're in the dev sandbox - use the sandbox API URL
       return `${protocol}//${apiHostname}`;
     }
-    // On production (no port in hostname), use the same origin
+    // We're on a real domain (production) - the API server is on the same origin
     return `${protocol}//${hostname}`;
+  }
+
+  // On native, use the baked-in API_BASE_URL if available
+  if (API_BASE_URL) {
+    return API_BASE_URL.replace(/\/$/, "");
   }
 
   // Fallback to empty (will use relative URL)
