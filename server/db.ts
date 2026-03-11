@@ -284,9 +284,9 @@ export async function loginChatUser(
 ): Promise<{ success: boolean; error?: string }> {
   username = sanitizeString(username, 32);
 
-  if (RESERVED_USERNAMES.some((r) => r.toLowerCase() === username.toLowerCase())) {
-    return { success: false, error: "This username is reserved." };
-  }
+  // NOTE: Reserved usernames (Ammar, Later) ARE allowed to log in.
+  // The reserved check only applies to registration (others can't register those names).
+  // Super admin role is granted automatically in socket.ts when they join a room.
 
   const db = await getDb();
   if (!db) return { success: false, error: "Database not available" };
@@ -349,6 +349,31 @@ export async function resetPasswordWithToken(token: string, newPassword: string)
   const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
   await db.update(chatUsers)
     .set({ passwordHash, resetToken: null, resetTokenExpiresAt: null, failedLoginAttempts: 0, lockedUntil: null })
+    .where(eq(chatUsers.id, user.id));
+  return { success: true };
+}
+
+export async function changeChatUserPassword(
+  username: string,
+  currentPassword: string,
+  newPassword: string,
+): Promise<{ success: boolean; error?: string }> {
+  username = sanitizeString(username, 32);
+  const db = await getDb();
+  if (!db) return { success: false, error: "Database not available" };
+
+  const result = await db.select().from(chatUsers).where(eq(chatUsers.username, username)).limit(1);
+  if (!result.length) return { success: false, error: "Account not found" };
+
+  const user = result[0];
+  const isValid = await bcrypt.compare(currentPassword, user.passwordHash);
+  if (!isValid) return { success: false, error: "Current password is incorrect" };
+
+  if (newPassword.length < 6) return { success: false, error: "New password must be at least 6 characters" };
+
+  const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+  await db.update(chatUsers)
+    .set({ passwordHash, failedLoginAttempts: 0, lockedUntil: null })
     .where(eq(chatUsers.id, user.id));
   return { success: true };
 }

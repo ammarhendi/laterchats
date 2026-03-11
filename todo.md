@@ -138,3 +138,7 @@
 - [x] WHO'S CHATTING panel header with gold text on dark purple
 - [x] Room selection: folder icons, user counts in brackets, info bar
 - [x] Friends screen: Later! Messenger header, I'm Available status, Online/Offline group headers
+- [x] Fix: Ammar/Later login blocked with "username is taken" error — should allow login with registered account and auto-grant super admin
+- [x] Seed Ammar and Later super admin accounts in database with provided credentials
+- [x] Add Change Password feature in Profile screen (current password + new password + confirm)
+- [x] Add changePassword tRPC endpoint on server

@@ -173,6 +173,16 @@ export const appRouter = router({
           statusMessage: input.statusMessage,
         });
       }),
+
+    changePassword: publicProcedure
+      .input(z.object({
+        username: z.string(),
+        currentPassword: z.string(),
+        newPassword: z.string().min(6),
+      }))
+      .mutation(async ({ input }) => {
+        return db.changeChatUserPassword(input.username, input.currentPassword, input.newPassword);
+      }),
   }),
   friends: router({
     list: publicProcedure

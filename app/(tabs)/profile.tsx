@@ -34,11 +34,20 @@ export default function ProfileScreen() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  // Change password state
+  const [showChangePwd, setShowChangePwd] = useState(false);
+  const [currentPwd, setCurrentPwd] = useState("");
+  const [newPwd, setNewPwd] = useState("");
+  const [confirmPwd, setConfirmPwd] = useState("");
+  const [pwdError, setPwdError] = useState("");
+  const [pwdSaving, setPwdSaving] = useState(false);
+
   const { data: profile, refetch } = trpc.user.getProfile.useQuery(
     { username },
     { enabled: !!username }
   );
   const updateProfileMutation = trpc.user.updateProfile.useMutation();
+  const changePasswordMutation = trpc.user.changePassword.useMutation();
 
   useEffect(() => {
     if (profile) {
@@ -129,6 +138,28 @@ export default function ProfileScreen() {
       Alert.alert("Error", "Could not save profile.");
     }
     setSaving(false);
+  };
+
+  const handleChangePassword = async () => {
+    setPwdError("");
+    if (!currentPwd || !newPwd || !confirmPwd) { setPwdError("Please fill in all fields."); return; }
+    if (newPwd !== confirmPwd) { setPwdError("New passwords do not match."); return; }
+    if (newPwd.length < 6) { setPwdError("New password must be at least 6 characters."); return; }
+    if (newPwd === currentPwd) { setPwdError("New password must be different from current password."); return; }
+    setPwdSaving(true);
+    try {
+      const result = await changePasswordMutation.mutateAsync({ username, currentPassword: currentPwd, newPassword: newPwd });
+      if (result.success) {
+        Alert.alert("Password Changed", "Your password has been updated successfully.");
+        setCurrentPwd(""); setNewPwd(""); setConfirmPwd("");
+        setShowChangePwd(false);
+      } else {
+        setPwdError(result.error || "Failed to change password.");
+      }
+    } catch (e: any) {
+      setPwdError(e?.message || "Failed to change password.");
+    }
+    setPwdSaving(false);
   };
 
   const handleSignOut = () => {
@@ -275,6 +306,77 @@ export default function ProfileScreen() {
             </View>
           </View>
         )}
+
+        {/* Change Password — Yahoo Messenger style */}
+        <View style={styles.section}>
+          <TouchableOpacity
+            style={styles.changePwdToggle}
+            onPress={() => { setShowChangePwd(!showChangePwd); setPwdError(""); }}
+          >
+            <Text style={styles.changePwdToggleText}>🔒  {showChangePwd ? "Cancel Password Change" : "Change Password"}</Text>
+          </TouchableOpacity>
+
+          {showChangePwd && (
+            <View style={styles.changePwdBox}>
+              <View style={styles.fieldGroup}>
+                <View style={styles.fieldRow}>
+                  <Text style={styles.fieldLabel}>Current</Text>
+                  <TextInput
+                    style={styles.fieldInput}
+                    value={currentPwd}
+                    onChangeText={setCurrentPwd}
+                    placeholder="Current password"
+                    placeholderTextColor="#bbb"
+                    secureTextEntry
+                    autoCapitalize="none"
+                    returnKeyType="next"
+                  />
+                </View>
+                <View style={styles.fieldDivider} />
+                <View style={styles.fieldRow}>
+                  <Text style={styles.fieldLabel}>New</Text>
+                  <TextInput
+                    style={styles.fieldInput}
+                    value={newPwd}
+                    onChangeText={setNewPwd}
+                    placeholder="New password (min 6)"
+                    placeholderTextColor="#bbb"
+                    secureTextEntry
+                    autoCapitalize="none"
+                    returnKeyType="next"
+                  />
+                </View>
+                <View style={styles.fieldDivider} />
+                <View style={styles.fieldRow}>
+                  <Text style={styles.fieldLabel}>Confirm</Text>
+                  <TextInput
+                    style={styles.fieldInput}
+                    value={confirmPwd}
+                    onChangeText={setConfirmPwd}
+                    placeholder="Repeat new password"
+                    placeholderTextColor="#bbb"
+                    secureTextEntry
+                    autoCapitalize="none"
+                    returnKeyType="done"
+                    onSubmitEditing={handleChangePassword}
+                  />
+                </View>
+              </View>
+              {pwdError ? <Text style={styles.pwdError}>{pwdError}</Text> : null}
+              <TouchableOpacity
+                style={styles.changePwdBtn}
+                onPress={handleChangePassword}
+                disabled={pwdSaving}
+              >
+                {pwdSaving ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.changePwdBtnText}>Update Password</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
 
         {/* Sign out */}
         <View style={styles.section}>
@@ -527,5 +629,41 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "bold",
     fontSize: 16,
+  },
+  changePwdToggle: {
+    backgroundColor: "#F3E5F5",
+    borderWidth: 1,
+    borderColor: "#CE93D8",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  changePwdToggleText: {
+    color: YM_PURPLE,
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  changePwdBox: {
+    marginTop: 12,
+    gap: 10,
+  },
+  pwdError: {
+    color: "#EF4444",
+    fontSize: 12,
+    marginTop: 4,
+    marginLeft: 4,
+  },
+  changePwdBtn: {
+    backgroundColor: YM_PURPLE,
+    paddingVertical: 13,
+    borderRadius: 10,
+    alignItems: "center",
+    marginTop: 4,
+  },
+  changePwdBtnText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 15,
   },
 });
