@@ -224,7 +224,9 @@ export default function ChatScreen() {
     incomingFrom,
     callDuration,
     startCall,
+    startVideoCall,
     acceptCall,
+    acceptVideoCall,
     rejectCall,
     endCall,
   } = usePrivateCall();
@@ -1092,7 +1094,7 @@ export default function ChatScreen() {
           </View>
         </View>
       </Modal>
-      {/* Incoming Call Overlay */}
+      {/* Incoming Audio Call Overlay */}
       {callState === "incoming" && incomingFrom && (
         <View style={styles.callOverlay}>
           <View style={styles.callBox}>
@@ -1110,21 +1112,37 @@ export default function ChatScreen() {
           </View>
         </View>
       )}
-
+      {/* Incoming Video Call Overlay */}
+      {callState === "incoming_video" && incomingFrom && (
+        <View style={styles.callOverlay}>
+          <View style={styles.callBox}>
+            <Text style={styles.callIcon}>📹</Text>
+            <Text style={styles.callTitle}>Incoming Video Call</Text>
+            <Text style={styles.callFrom}>{incomingFrom}</Text>
+            <View style={styles.callBtns}>
+              <TouchableOpacity style={styles.callRejectBtn} onPress={rejectCall}>
+                <Text style={styles.callRejectText}>🔴 Decline</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.callAcceptBtn} onPress={acceptVideoCall}>
+                <Text style={styles.callAcceptText}>🟢 Accept</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
       {/* Outgoing Call Banner */}
-      {callState === "calling" && callPartner && (
+      {(callState === "calling" || callState === "calling_video") && callPartner && (
         <View style={styles.callBanner}>
-          <Text style={styles.callBannerText}>📞 Calling {callPartner}...</Text>
+          <Text style={styles.callBannerText}>{callState === "calling_video" ? "📹" : "📞"} Calling {callPartner}...</Text>
           <TouchableOpacity style={styles.callEndBannerBtn} onPress={endCall}>
             <Text style={styles.callEndBannerText}>Cancel</Text>
           </TouchableOpacity>
         </View>
       )}
-
       {/* Active Call Banner */}
-      {callState === "connected" && callPartner && (
+      {(callState === "connected" || callState === "connected_video") && callPartner && (
         <View style={[styles.callBanner, { backgroundColor: "#004400" }]}>
-          <Text style={styles.callBannerText}>🟢 In call with {callPartner} • {callDuration}</Text>
+          <Text style={styles.callBannerText}>{callState === "connected_video" ? "📹" : "🟢"} In call with {callPartner} • {callDuration}</Text>
           <TouchableOpacity style={styles.callEndBannerBtn} onPress={endCall}>
             <Text style={styles.callEndBannerText}>End</Text>
           </TouchableOpacity>
@@ -1336,7 +1354,7 @@ export default function ChatScreen() {
 
               <Text style={styles.helpSectionTitle}>🌟 Welcome to Later! Chat</Text>
               <Text style={styles.helpText}>
-                Later! Chat is a real-time group chat app for connecting with people. You can join chat rooms, send private messages, make voice calls, and connect with friends — all with end-to-end encryption.
+                Later! Chat is a real-time group chat app for connecting with people. You can join chat rooms, send private messages, make voice calls, and connect with friends — all in a fully private and secure environment.
               </Text>
 
               <View style={styles.helpDivider} />
@@ -1366,7 +1384,7 @@ export default function ChatScreen() {
               <Text style={styles.helpSectionTitle}>💌 Private Messages (PM)</Text>
               <Text style={styles.helpText}>
                 • Tap a user → <Text style={styles.helpBold}>Send Private Message</Text> to open a private chat.{"\n"}
-                • PMs are <Text style={styles.helpBold}>end-to-end encrypted (E2EE)</Text> — only you and the recipient can read them.{"\n"}
+                • PMs are <Text style={styles.helpBold}>fully private and secure</Text> — only you and the recipient can read them.{"\n"}
                 • A banner notification appears at the top when you receive a new PM.{"\n"}
                 • Tap <Text style={styles.helpBold}>Reply</Text> on the banner to open the conversation.{"\n"}
                 • 🔐 <Text style={styles.helpBold}>Secret Mode</Text>: Messages auto-delete after 5, 10, 30, or 60 seconds.{"\n"}
@@ -1416,7 +1434,7 @@ export default function ChatScreen() {
               <View style={styles.helpDivider} />
               <Text style={styles.helpSectionTitle}>🔒 Privacy & Security</Text>
               <Text style={styles.helpText}>
-                • All private messages use <Text style={styles.helpBold}>ECDH P-256 + AES-GCM 256-bit</Text> end-to-end encryption.{"\n"}
+                • All private messages are <Text style={styles.helpBold}>fully encrypted</Text> — no one else can ever read them.{"\n"}
                 • Screenshots and screen recording are blocked for your privacy.{"\n"}
                 • All conversations are fully secured and private.
               </Text>

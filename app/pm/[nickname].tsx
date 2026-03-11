@@ -254,7 +254,7 @@ export default function PrivateMessageScreen() {
           </View>
 
           <View style={styles.headerRight}>
-            <Text style={styles.e2eeLabel}>🔒 E2EE</Text>
+            <Text style={styles.e2eeLabel}>🔒 Private</Text>
           </View>
         </View>
 
@@ -329,7 +329,7 @@ export default function PrivateMessageScreen() {
             <Text style={styles.emptyIcon}>💬</Text>
             <Text style={styles.emptyTitle}>Start a conversation</Text>
             <Text style={styles.emptySubtitle}>Send a private message to {targetNickname}</Text>
-            <Text style={styles.emptyE2ee}>🔒 End-to-end encrypted</Text>
+            <Text style={styles.emptyE2ee}>🔒 Private & Secure</Text>
           </View>
         ) : (
           <FlatList
@@ -378,7 +378,7 @@ export default function PrivateMessageScreen() {
 
         {/* ── Footer ── */}
         <View style={styles.footer}>
-          <Text style={styles.footerText}>© Later. All rights reserved. | Secured with E2EE</Text>
+          <Text style={styles.footerText}>© Later. All rights reserved. | Private & Secure</Text>
         </View>
 
       </KeyboardAvoidingView>

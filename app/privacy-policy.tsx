@@ -31,13 +31,13 @@ export default function PrivacyPolicyScreen() {
           We collect the following types of information:{"\n\n"}
           <Text style={styles.bold}>Account Information:</Text> When you register, we collect your username, email address, date of birth, and password (stored as a secure hash).{"\n\n"}
           <Text style={styles.bold}>Profile Information:</Text> Display name, status message, and optional profile photo or video you choose to upload.{"\n\n"}
-          <Text style={styles.bold}>Usage Data:</Text> Chat room participation, message timestamps, and connection metadata. Private messages (PMs) are end-to-end encrypted and cannot be read by us.{"\n\n"}
+          <Text style={styles.bold}>Usage Data:</Text> Chat room participation, message timestamps, and connection metadata. Private messages (PMs) are fully encrypted and cannot be read by us.{"\n\n"}
           <Text style={styles.bold}>Device Information:</Text> Device type, operating system version, and app version for technical support purposes.
         </Text>
 
-        <Text style={styles.section}>3. End-to-End Encryption</Text>
+        <Text style={styles.section}>3. Message Privacy</Text>
         <Text style={styles.body}>
-          All private messages (PMs) between users are protected with end-to-end encryption (E2EE). This means only you and the person you are communicating with can read your private messages. Later! does not have access to the content of your private conversations.{"\n\n"}
+          All private messages (PMs) between users are fully encrypted. This means only you and the person you are communicating with can read your private messages. Later! does not have access to the content of your private conversations.{"\n\n"}
           Secret Mode messages are additionally configured to auto-delete after a timer you set (5–60 seconds).
         </Text>
 

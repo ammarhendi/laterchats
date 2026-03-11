@@ -31,7 +31,7 @@ export default function TermsOfServiceScreen() {
         <Text style={styles.body}>
           Later! is a real-time voice and text chat application that allows users to:{"\n\n"}
           • Join public chat rooms and communicate with other users{"\n"}
-          • Send private messages (PMs) with end-to-end encryption{"\n"}
+          • Send fully private and secure messages (PMs){"\n"}
           • Make private voice calls{"\n"}
           • Manage a friends/buddy list{"\n"}
           • Share media files in private conversations
@@ -64,7 +64,7 @@ export default function TermsOfServiceScreen() {
         <Text style={styles.section}>5. Content Ownership</Text>
         <Text style={styles.body}>
           You retain ownership of content you create and share. By posting content in public chat rooms, you grant Later! a non-exclusive, royalty-free license to display that content within the App.{"\n\n"}
-          Private messages are end-to-end encrypted and cannot be accessed by Later!. You are solely responsible for the content of your private communications.
+          Private messages are fully encrypted and cannot be accessed by Later!. You are solely responsible for the content of your private communications.
         </Text>
 
         <Text style={styles.section}>6. Moderation</Text>

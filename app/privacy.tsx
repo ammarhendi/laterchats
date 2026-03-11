@@ -26,7 +26,7 @@ export default function PrivacyPolicyScreen() {
         <Text style={styles.sectionTitle}>1. Information We Collect</Text>
         <Text style={styles.body}>
           <Text style={styles.bold}>Account Information:</Text> When you register, we collect your username and password (stored securely as a hashed value). We do not collect your real name, email address, or phone number unless you choose to provide them in your profile.{"\n\n"}
-          <Text style={styles.bold}>Chat Messages:</Text> Messages sent in public chat rooms are stored on our servers to provide chat history. Private messages (PMs) between users are end-to-end encrypted and cannot be read by Later! Chat.{"\n\n"}
+          <Text style={styles.bold}>Chat Messages:</Text> Messages sent in public chat rooms are stored on our servers to provide chat history. Private messages (PMs) between users are fully encrypted and cannot be read by Later! Chat.{"\n\n"}
           <Text style={styles.bold}>Profile Information:</Text> Any profile picture, display name, or status message you choose to set is stored on our servers.{"\n\n"}
           <Text style={styles.bold}>Usage Data:</Text> We may collect anonymous usage statistics (such as which rooms are most active) to improve the app. This data is never linked to individual users.
         </Text>
@@ -45,7 +45,7 @@ export default function PrivacyPolicyScreen() {
         <Text style={styles.body}>
           We take data security seriously:{"\n"}
           • Passwords are hashed using industry-standard algorithms and never stored in plain text{"\n"}
-          • Private messages are end-to-end encrypted using public-key cryptography{"\n"}
+          • Private messages are fully encrypted using advanced cryptography{"\n"}
           • All data is transmitted over HTTPS/WSS (encrypted connections){"\n"}
           • Screenshot protection is enabled to prevent unauthorized capture of chat content
         </Text>

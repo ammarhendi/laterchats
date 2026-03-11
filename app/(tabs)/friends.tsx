@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { crossInfo, crossConfirm } from "@/lib/cross-alert";
 import { trpc } from "@/lib/trpc";
 import { useChat } from "@/lib/chat-context";
+import { usePrivateCall } from "@/lib/use-private-call";
 import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { ScrollView } from "react-native";
@@ -24,6 +25,9 @@ import { ScrollView } from "react-native";
 const YM_PURPLE = "#7B0099";
 const YM_PURPLE_DARK = "#5A0070";
 const YM_GOLD = "#FFD700";
+const YM_GREEN = "#2E7D32";
+const YM_BLUE = "#1565C0";
+const YM_RED = "#C62828";
 
 type FriendEntry = {
   username: string;
@@ -55,16 +59,43 @@ const FALLBACK_ROOMS = [
 ];
 
 export default function FriendsScreen() {
-  const { nickname, pendingFriendRequests, dismissFriendRequest, joinRoom } = useChat();
+  const {
+    nickname,
+    pendingFriendRequests,
+    dismissFriendRequest,
+    joinRoom,
+    unreadPMs,
+    markPMRead,
+    ensureSocket,
+  } = useChat();
+
+  const {
+    callState,
+    callPartner,
+    incomingFrom,
+    callDuration,
+    startCall,
+    startVideoCall,
+    acceptCall,
+    acceptVideoCall,
+    rejectCall,
+    endCall,
+  } = usePrivateCall();
 
   // Reset the badge when the user views the Friends screen
   useEffect(() => {
     if (pendingFriendRequests > 0) {
-      // Clear the badge by dismissing all pending notifications
-      // (The actual count resets when they view the screen)
       dismissFriendRequest();
     }
   }, []);
+
+  // Ensure socket is connected so calls/PMs work from Friends screen
+  useEffect(() => {
+    if (nickname) {
+      ensureSocket();
+    }
+  }, [nickname]);
+
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [addUsername, setAddUsername] = useState("");
   const [addLoading, setAddLoading] = useState(false);
@@ -80,7 +111,6 @@ export default function FriendsScreen() {
     setJoiningRoomId(roomId);
     joinRoom(nickname, roomId);
     setRoomsModalVisible(false);
-    // Navigation to chat happens automatically via useEffect in chat-context when roomId is set
     setTimeout(() => {
       router.push("/chat" as any);
       setJoiningRoomId(null);
@@ -145,6 +175,29 @@ export default function FriendsScreen() {
     }
   };
 
+  const handleAudioCall = (friendUsername: string) => {
+    if (callState !== "idle") {
+      crossInfo("Already in a call", "Please end your current call first.");
+      return;
+    }
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    startCall(friendUsername);
+  };
+
+  const handleVideoCall = (friendUsername: string) => {
+    if (callState !== "idle") {
+      crossInfo("Already in a call", "Please end your current call first.");
+      return;
+    }
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    startVideoCall(friendUsername);
+  };
+
+  const handleOpenPM = (friendUsername: string) => {
+    markPMRead(friendUsername);
+    router.push(`/pm/${friendUsername}` as any);
+  };
+
   if (!username) {
     return (
       <ScreenContainer>
@@ -162,6 +215,11 @@ export default function FriendsScreen() {
   const pending = (friends || []).filter((f: FriendEntry) => f.status === "pending");
   const incoming = pending.filter((f: FriendEntry) => f.direction === "received");
   const outgoing = pending.filter((f: FriendEntry) => f.direction === "sent");
+
+  // Unread PM notifications — only from friends
+  const friendNames = new Set(accepted.map((f: FriendEntry) => f.username));
+  const unreadPMEntries = Object.entries(unreadPMs).filter(([from]) => friendNames.has(from) && (unreadPMs[from] || 0) > 0);
+  const totalUnread = unreadPMEntries.reduce((sum, [, count]) => sum + count, 0);
 
   return (
     <ScreenContainer containerClassName="bg-white">
@@ -202,6 +260,50 @@ export default function FriendsScreen() {
         </View>
       </View>
 
+      {/* ── Incoming Call Banner ── */}
+      {callState === "incoming" && incomingFrom && (
+        <View style={styles.callBanner}>
+          <Text style={styles.callBannerTitle}>📞 Incoming Call</Text>
+          <Text style={styles.callBannerFrom}>{incomingFrom} is calling you...</Text>
+          <View style={styles.callBannerActions}>
+            <TouchableOpacity style={styles.callAcceptBtn} onPress={acceptCall}>
+              <Text style={styles.callAcceptText}>✅ Answer</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.callRejectBtn} onPress={rejectCall}>
+              <Text style={styles.callRejectText}>❌ Decline</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* ── Incoming Video Call Banner ── */}
+      {callState === "incoming_video" && incomingFrom && (
+        <View style={[styles.callBanner, { backgroundColor: "#1565C0" }]}>
+          <Text style={styles.callBannerTitle}>📹 Incoming Video Call</Text>
+          <Text style={styles.callBannerFrom}>{incomingFrom} wants to video call...</Text>
+          <View style={styles.callBannerActions}>
+            <TouchableOpacity style={styles.callAcceptBtn} onPress={acceptVideoCall}>
+              <Text style={styles.callAcceptText}>✅ Answer</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.callRejectBtn} onPress={rejectCall}>
+              <Text style={styles.callRejectText}>❌ Decline</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* ── Active Call Bar ── */}
+      {(callState === "calling" || callState === "connected") && callPartner && (
+        <View style={[styles.activeCallBar, callState === "connected" && styles.activeCallBarConnected]}>
+          <Text style={styles.activeCallText}>
+            {callState === "calling" ? `📞 Calling ${callPartner}...` : `🟢 In call with ${callPartner} • ${callDuration}`}
+          </Text>
+          <TouchableOpacity style={styles.endCallBtn} onPress={endCall}>
+            <Text style={styles.endCallText}>End</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {isLoading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={YM_PURPLE} />
@@ -212,6 +314,39 @@ export default function FriendsScreen() {
           renderItem={null}
           ListHeaderComponent={
             <View>
+              {/* ── PM Notification Cards ── */}
+              {unreadPMEntries.length > 0 && (
+                <View>
+                  <View style={[styles.sectionHeader, { backgroundColor: "#FFF3E0" }]}>
+                    <Text style={[styles.sectionHeaderText, { color: "#E65100" }]}>
+                      💬 New Messages ({totalUnread})
+                    </Text>
+                  </View>
+                  {unreadPMEntries.map(([from, count]) => (
+                    <TouchableOpacity
+                      key={from}
+                      style={styles.pmNotifCard}
+                      onPress={() => handleOpenPM(from)}
+                      activeOpacity={0.75}
+                    >
+                      <View style={styles.pmNotifAvatar}>
+                        <FriendAvatar username={from} size={42} />
+                        <View style={styles.pmNotifBadge}>
+                          <Text style={styles.pmNotifBadgeText}>{count > 9 ? "9+" : count}</Text>
+                        </View>
+                      </View>
+                      <View style={styles.pmNotifInfo}>
+                        <Text style={styles.pmNotifName}>{from}</Text>
+                        <Text style={styles.pmNotifSub}>
+                          {count === 1 ? "1 new private message" : `${count} new private messages`}
+                        </Text>
+                      </View>
+                      <Text style={styles.pmNotifArrow}>›</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+
               {/* Incoming friend requests */}
               {incoming.length > 0 && (
                 <View>
@@ -238,56 +373,79 @@ export default function FriendsScreen() {
                 </View>
               )}
 
-              {/* Friends list group headers */}
+              {/* Online friends */}
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionHeaderText}>🟡 Online ({accepted.filter((f: FriendEntry) => f.isOnline).length})</Text>
               </View>
-              {accepted.filter((f: FriendEntry) => f.isOnline).length === 0 && accepted.length > 0 && (
-                <View style={styles.offlineSectionHeader}>
-                  <Text style={styles.offlineSectionHeaderText}>⚪ Offline ({accepted.filter((f: FriendEntry) => !f.isOnline).length})</Text>
-                </View>
-              )}
+
               {accepted.filter((f: FriendEntry) => f.isOnline).length > 0 && (
                 <View style={styles.offlineSectionHeader}>
                   <Text style={styles.offlineSectionHeaderText}>⚪ Offline ({accepted.filter((f: FriendEntry) => !f.isOnline).length})</Text>
                 </View>
               )}
+
               {/* All friends placeholder header for empty state */}
               {accepted.length === 0 && (
                 <View style={styles.sectionHeader}>
                   <Text style={styles.sectionHeaderText}>👥 Friends (0)</Text>
                 </View>
               )}
+
               {accepted.length === 0 ? (
                 <View style={styles.noFriendsContainer}>
                   <Text style={styles.noFriendsText}>No friends yet.</Text>
                   <Text style={styles.noFriendsSubtext}>Tap "+ Add Friend" to find people.</Text>
                 </View>
               ) : (
-                accepted.map((f: FriendEntry) => (
-                  <TouchableOpacity
-                    key={f.username}
-                    style={styles.friendRow}
-                    onLongPress={() => handleRemove(f.username)}
-                  >
-                    <View style={styles.friendAvatarWrap}>
-                      <FriendAvatar username={f.username} size={44} />
-                      <View style={[styles.statusDot, f.isOnline ? styles.statusOnline : styles.statusOffline]} />
+                accepted.map((f: FriendEntry) => {
+                  const pmCount = unreadPMs[f.username] || 0;
+                  return (
+                    <View key={f.username} style={styles.friendRow}>
+                      <TouchableOpacity
+                        style={styles.friendAvatarWrap}
+                        onLongPress={() => handleRemove(f.username)}
+                      >
+                        <FriendAvatar username={f.username} size={44} />
+                        <View style={[styles.statusDot, f.isOnline ? styles.statusOnline : styles.statusOffline]} />
+                      </TouchableOpacity>
+                      <View style={styles.friendInfo}>
+                        <Text style={styles.friendUsername}>{f.username}</Text>
+                        <Text style={[styles.friendStatus, f.isOnline ? styles.friendStatusOnline : styles.friendStatusOffline]}>
+                          {f.isOnline ? "● Online" : "○ Offline"}
+                        </Text>
+                      </View>
+                      {/* Action buttons */}
+                      <View style={styles.friendActions}>
+                        {/* Message button with unread badge */}
+                        <TouchableOpacity
+                          style={styles.actionBtn}
+                          onPress={() => handleOpenPM(f.username)}
+                        >
+                          <Text style={styles.actionBtnIcon}>💬</Text>
+                          {pmCount > 0 && (
+                            <View style={styles.actionBadge}>
+                              <Text style={styles.actionBadgeText}>{pmCount > 9 ? "9+" : pmCount}</Text>
+                            </View>
+                          )}
+                        </TouchableOpacity>
+                        {/* Audio call button */}
+                        <TouchableOpacity
+                          style={[styles.actionBtn, !f.isOnline && styles.actionBtnDisabled]}
+                          onPress={() => f.isOnline && handleAudioCall(f.username)}
+                        >
+                          <Text style={[styles.actionBtnIcon, !f.isOnline && styles.actionBtnIconDisabled]}>📞</Text>
+                        </TouchableOpacity>
+                        {/* Video call button */}
+                        <TouchableOpacity
+                          style={[styles.actionBtn, !f.isOnline && styles.actionBtnDisabled]}
+                          onPress={() => f.isOnline && handleVideoCall(f.username)}
+                        >
+                          <Text style={[styles.actionBtnIcon, !f.isOnline && styles.actionBtnIconDisabled]}>📹</Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
-                    <View style={styles.friendInfo}>
-                      <Text style={styles.friendUsername}>{f.username}</Text>
-                      <Text style={[styles.friendStatus, f.isOnline ? styles.friendStatusOnline : styles.friendStatusOffline]}>
-                        {f.isOnline ? "● Online" : "○ Offline"}
-                      </Text>
-                    </View>
-                    <TouchableOpacity
-                      style={styles.pmBtn}
-                      onPress={() => router.push(`/pm/${f.username}`)}
-                    >
-                      <Text style={styles.pmBtnText}>Message</Text>
-                    </TouchableOpacity>
-                  </TouchableOpacity>
-                ))
+                  );
+                })
               )}
 
               {/* Outgoing pending requests */}
@@ -480,6 +638,128 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  // ── Call banners ──
+  callBanner: {
+    backgroundColor: "#1B5E20",
+    padding: 14,
+    borderBottomWidth: 2,
+    borderBottomColor: "#4CAF50",
+  },
+  callBannerTitle: {
+    color: "#fff",
+    fontWeight: "800",
+    fontSize: 16,
+    marginBottom: 2,
+  },
+  callBannerFrom: {
+    color: "#A5D6A7",
+    fontSize: 13,
+    marginBottom: 10,
+  },
+  callBannerActions: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  callAcceptBtn: {
+    backgroundColor: "#4CAF50",
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  callAcceptText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 14,
+  },
+  callRejectBtn: {
+    backgroundColor: "#C62828",
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  callRejectText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 14,
+  },
+  activeCallBar: {
+    backgroundColor: "#E65100",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  activeCallBarConnected: {
+    backgroundColor: "#1B5E20",
+  },
+  activeCallText: {
+    color: "#fff",
+    fontWeight: "600",
+    fontSize: 14,
+    flex: 1,
+  },
+  endCallBtn: {
+    backgroundColor: "#C62828",
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 14,
+  },
+  endCallText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 13,
+  },
+  // ── PM Notification cards ──
+  pmNotifCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF8E1",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#FFE082",
+  },
+  pmNotifAvatar: {
+    position: "relative",
+  },
+  pmNotifBadge: {
+    position: "absolute",
+    top: -4,
+    right: -4,
+    backgroundColor: "#E65100",
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 3,
+  },
+  pmNotifBadgeText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "bold",
+  },
+  pmNotifInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  pmNotifName: {
+    fontWeight: "bold",
+    fontSize: 15,
+    color: "#222",
+  },
+  pmNotifSub: {
+    color: "#E65100",
+    fontSize: 12,
+    marginTop: 2,
+  },
+  pmNotifArrow: {
+    color: "#E65100",
+    fontSize: 22,
+    fontWeight: "bold",
+  },
+  // ── Section headers ──
   sectionHeader: {
     backgroundColor: "#EDE7F6",
     paddingHorizontal: 14,
@@ -570,10 +850,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 6,
   },
+  // ── Friend row ──
   friendRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: "#f0f0f0",
@@ -600,15 +881,15 @@ const styles = StyleSheet.create({
   },
   friendInfo: {
     flex: 1,
-    marginLeft: 12,
+    marginLeft: 10,
   },
   friendUsername: {
     fontWeight: "bold",
-    fontSize: 15,
+    fontSize: 14,
     color: "#222",
   },
   friendStatus: {
-    fontSize: 12,
+    fontSize: 11,
     marginTop: 2,
   },
   friendStatusOnline: {
@@ -617,21 +898,52 @@ const styles = StyleSheet.create({
   friendStatusOffline: {
     color: "#aaa",
   },
+  // ── Action buttons (Message, Audio, Video) ──
+  friendActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  actionBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "#F3E5F5",
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
+  actionBtnDisabled: {
+    backgroundColor: "#F5F5F5",
+    opacity: 0.5,
+  },
+  actionBtnIcon: {
+    fontSize: 18,
+  },
+  actionBtnIconDisabled: {
+    opacity: 0.4,
+  },
+  actionBadge: {
+    position: "absolute",
+    top: -3,
+    right: -3,
+    backgroundColor: "#E65100",
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 2,
+  },
+  actionBadgeText: {
+    color: "#fff",
+    fontSize: 9,
+    fontWeight: "bold",
+  },
   pendingText: {
     color: "#F59E0B",
     fontSize: 12,
     marginTop: 2,
-  },
-  pmBtn: {
-    backgroundColor: YM_PURPLE,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 14,
-  },
-  pmBtnText: {
-    color: "#fff",
-    fontWeight: "bold",
-    fontSize: 12,
   },
   cancelBtn: {
     backgroundColor: "#ddd",
@@ -751,7 +1063,6 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: "#f0f0f0",
-    backgroundColor: "#fff",
   },
   roomRowIcon: {
     width: 40,
@@ -768,13 +1079,13 @@ const styles = StyleSheet.create({
     color: "#222",
   },
   roomRowDesc: {
-    fontSize: 12,
     color: "#888",
+    fontSize: 12,
     marginTop: 2,
   },
   roomRowArrow: {
+    color: YM_PURPLE,
     fontSize: 22,
-    color: "#aaa",
-    fontWeight: "300",
+    fontWeight: "bold",
   },
 });

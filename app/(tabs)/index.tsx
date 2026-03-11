@@ -468,7 +468,7 @@ export default function WelcomeScreen() {
             {activeTab === "register" && (
               <View style={styles.ymForm}>
                 <Text style={styles.ymFormTitle}>Create your Later! ID</Text>
-                <Text style={styles.ymFormSubtitle}>18+ only. All conversations are private.</Text>
+                <Text style={styles.ymFormSubtitle}>All conversations are private and secure.</Text>
 
                 <View style={styles.ymInputGroup}>
                   <View style={styles.ymInputRow}>
@@ -524,7 +524,7 @@ export default function WelcomeScreen() {
             )}
 
             <View style={styles.ymFooter}>
-              <Text style={styles.ymFooterText}>18+ only · Conversations are private &amp; secure</Text>
+              <Text style={styles.ymFooterText}>Conversations are private &amp; secure</Text>
             </View>
           </View>
 
@@ -618,12 +618,11 @@ export default function WelcomeScreen() {
               <Text style={styles.modalTitle}>Age Verification</Text>
             </ExpoLinearGradient>
             <View style={styles.modalBody}>
-              <Text style={{ fontSize: 40, textAlign: "center", marginBottom: 8 }}>🔞</Text>
-              <Text style={[styles.modalSubtitle, { textAlign: "center", fontWeight: "700", fontSize: 16, color: YM.text }]}>
-                Later! is for adults only
+              <Text style={[styles.modalSubtitle, { textAlign: "center", fontWeight: "800", fontSize: 18, color: YM.text, marginBottom: 6 }]}>
+                Welcome to Later!
               </Text>
-              <Text style={[styles.modalSubtitle, { textAlign: "center", marginTop: 8 }]}>
-                By continuing, you confirm that you are 18 years of age or older and agree to our Terms of Service and Privacy Policy.
+              <Text style={[styles.modalSubtitle, { textAlign: "center", marginTop: 4 }]}>
+                This app is intended for users 18 years of age or older. By continuing, you confirm you meet this requirement and agree to our Terms of Service and Privacy Policy.
               </Text>
               <TouchableOpacity style={[styles.ymSignInBtn, { marginTop: 16 }]} onPress={handleAgeConfirm} activeOpacity={0.85}>
                 <Text style={styles.ymSignInBtnText}>I am 18 or older — Continue</Text>

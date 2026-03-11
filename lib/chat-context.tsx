@@ -59,6 +59,8 @@ interface ChatContextType {
   clearMessages: () => void;
   clearAllMessages: () => void;
   markPMRead: (fromNickname: string) => void;
+  // Socket management
+  ensureSocket: () => void;
   // Admin actions
   kickUser: (targetNickname: string) => void;
   banUser: (targetNickname: string, reason?: string, voiceBanOnly?: boolean) => void;
@@ -94,6 +96,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const pendingRoomIdRef = useRef<number | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const nicknameRef = useRef<string | null>(null);
+  // Persist the "cleared at" timestamp so messages cleared by the user don't come back after sign-out/in
+  const clearedAtRef = useRef<number>(0);
 
   useEffect(() => {
     AsyncStorage.getItem("later_nickname").then((n) => {
@@ -101,6 +105,10 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         setNicknameState(n);
         nicknameRef.current = n;
       }
+    });
+    // Restore cleared-at timestamp so filtered view persists across sign-out/in
+    AsyncStorage.getItem("later_cleared_at").then((ts) => {
+      if (ts) clearedAtRef.current = parseInt(ts, 10);
     });
   }, []);
 
@@ -180,7 +188,11 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     });
 
     sock.on("message_history", (history: ChatMessage[]) => {
-      setMessages(history.map((m) => ({ ...m, createdAt: new Date(m.createdAt) })));
+      const cutoff = clearedAtRef.current;
+      const filtered = history
+        .map((m) => ({ ...m, createdAt: new Date(m.createdAt) }))
+        .filter((m) => cutoff === 0 || new Date(m.createdAt).getTime() > cutoff);
+      setMessages(filtered);
     });
 
     sock.on("new_message", (msg: ChatMessage) => {
@@ -478,7 +490,12 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     socketRef.current?.emit("toggle_mute", { isMuted: newMuted });
   }, [isMuted]);
 
-  const clearMessages = useCallback(() => setMessages([]), []);
+  const clearMessages = useCallback(() => {
+    const now = Date.now();
+    clearedAtRef.current = now;
+    AsyncStorage.setItem("later_cleared_at", String(now)).catch(() => {});
+    setMessages([]);
+  }, []);
 
   const clearAllMessages = useCallback(() => {
     const sock = socketRef.current;
@@ -573,6 +590,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         pendingFriendRequests,
         incomingFriendRequest,
         dismissFriendRequest,
+        ensureSocket: initSocket,
       }}
     >
       {children}

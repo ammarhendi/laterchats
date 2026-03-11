@@ -47,9 +47,12 @@ const ICE_SERVERS = [
 
 export type CallState =
   | "idle"
-  | "calling"       // outgoing call ringing
-  | "incoming"      // incoming call alert
-  | "connected"     // in call
+  | "calling"          // outgoing audio call ringing
+  | "calling_video"    // outgoing video call ringing
+  | "incoming"         // incoming audio call alert
+  | "incoming_video"   // incoming video call alert
+  | "connected"        // in audio call
+  | "connected_video"  // in video call
   | "ended";
 
 export function usePrivateCall() {
@@ -62,16 +65,19 @@ export function usePrivateCall() {
   }, []);
   const [callPartner, setCallPartner] = useState<string | null>(null);
   const [incomingFrom, setIncomingFrom] = useState<string | null>(null);
-  const [callDuration, setCallDuration] = useState(0);
+  const [callDuration, setCallDurationState] = useState(0);
+  const [localStream, setLocalStream] = useState<any>(null);
+  const [remoteStream, setRemoteStream] = useState<any>(null);
 
   const pcRef = useRef<any>(null);
   const localStreamRef = useRef<any>(null);
   const audioElementRef = useRef<any>(null);
   const callTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const ringTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Track whether current/incoming call is video
+  const isVideoCallRef = useRef(false);
 
   const cleanup = useCallback(() => {
-    // Stop local stream
     if (localStreamRef.current) {
       try {
         if (localStreamRef.current.getTracks) {
@@ -79,18 +85,16 @@ export function usePrivateCall() {
         }
       } catch {}
       localStreamRef.current = null;
+      setLocalStream(null);
     }
-    // Close peer connection
     if (pcRef.current) {
       try { pcRef.current.close(); } catch {}
       pcRef.current = null;
     }
-    // Clean up audio (web)
     if (audioElementRef.current) {
       try { audioElementRef.current.srcObject = null; } catch {}
       audioElementRef.current = null;
     }
-    // Stop timer
     if (callTimerRef.current) {
       clearInterval(callTimerRef.current);
       callTimerRef.current = null;
@@ -99,10 +103,12 @@ export function usePrivateCall() {
       clearTimeout(ringTimeoutRef.current);
       ringTimeoutRef.current = null;
     }
-    setCallDuration(0);
+    setCallDurationState(0);
+    setRemoteStream(null);
+    isVideoCallRef.current = false;
   }, []);
 
-  const createPC = useCallback((partnerNickname: string) => {
+  const createPC = useCallback((partnerNickname: string, withVideo: boolean) => {
     const PeerConnection = getRTCPeerConnection();
     if (!PeerConnection) return null;
 
@@ -120,7 +126,9 @@ export function usePrivateCall() {
     pc.ontrack = (event: any) => {
       const stream = event.streams?.[0] || event.stream;
       if (!stream) return;
-      if (Platform.OS === "web") {
+      setRemoteStream(stream);
+      if (Platform.OS === "web" && !withVideo) {
+        // Audio only — play via Audio element
         if (!audioElementRef.current) {
           audioElementRef.current = new Audio();
           audioElementRef.current.autoplay = true;
@@ -131,43 +139,39 @@ export function usePrivateCall() {
     };
 
     pc.onaddstream = (event: any) => {
-      // react-native-webrtc older API — audio plays automatically
-      if (Platform.OS !== "web") {
-        console.log("[PrivateCall] Remote stream received from:", partnerNickname);
+      // react-native-webrtc older API
+      if (event.stream) {
+        setRemoteStream(event.stream);
       }
     };
 
     pc.onconnectionstatechange = () => {
       const state = pc.connectionState;
       if (state === "connected") {
-        setCallState("connected");
-        setCallDuration(0);
+        setCallStateSync(withVideo ? "connected_video" : "connected");
+        setCallDurationState(0);
         callTimerRef.current = setInterval(() => {
-          setCallDuration((d) => d + 1);
+          setCallDurationState((d) => d + 1);
         }, 1000);
       } else if (state === "failed" || state === "closed" || state === "disconnected") {
         cleanup();
-        setCallState("ended");
+        setCallStateSync("ended");
         setCallPartner(null);
-        setTimeout(() => setCallState("idle"), 2000);
+        setTimeout(() => setCallStateSync("idle"), 2000);
       }
     };
 
     return pc;
-  }, [socket, cleanup]);
+  }, [socket, cleanup, setCallStateSync]);
 
-  // Initiate a call to another user
+  // ── Initiate an audio call ──
   const startCall = useCallback(async (targetNickname: string) => {
-    if (callState !== "idle") return;
-    if (!socket) return;
-
+    if (callStateRef.current !== "idle") return;
+    if (!socket) { crossInfo("Not connected", "Please join a room first."); return; }
+    isVideoCallRef.current = false;
     setCallPartner(targetNickname);
-    setCallState("calling");
-
-    // Request call
-    socket.emit("private_call_request", { targetNickname });
-
-    // Auto-cancel if no answer in 30 seconds
+    setCallStateSync("calling");
+    socket.emit("private_call_request", { targetNickname, isVideo: false });
     ringTimeoutRef.current = setTimeout(() => {
       if (callStateRef.current === "calling") {
         socket.emit("private_call_end", { targetNickname });
@@ -179,96 +183,117 @@ export function usePrivateCall() {
     }, 30000);
   }, [socket, cleanup, setCallStateSync]);
 
-  // Accept an incoming call
+  // ── Initiate a video call ──
+  const startVideoCall = useCallback(async (targetNickname: string) => {
+    if (callStateRef.current !== "idle") return;
+    if (!socket) { crossInfo("Not connected", "Please join a room first."); return; }
+    isVideoCallRef.current = true;
+    setCallPartner(targetNickname);
+    setCallStateSync("calling_video");
+    socket.emit("private_call_request", { targetNickname, isVideo: true });
+    ringTimeoutRef.current = setTimeout(() => {
+      if (callStateRef.current === "calling_video") {
+        socket.emit("private_call_end", { targetNickname });
+        cleanup();
+        setCallStateSync("idle");
+        setCallPartner(null);
+        crossInfo("No Answer", `${targetNickname} didn't answer.`);
+      }
+    }, 30000);
+  }, [socket, cleanup, setCallStateSync]);
+
+  // ── Accept an incoming audio call ──
   const acceptCall = useCallback(async () => {
     if (!incomingFrom || !socket) return;
     const from = incomingFrom;
-
-    if (ringTimeoutRef.current) {
-      clearTimeout(ringTimeoutRef.current);
-      ringTimeoutRef.current = null;
-    }
-
+    if (ringTimeoutRef.current) { clearTimeout(ringTimeoutRef.current); ringTimeoutRef.current = null; }
     setCallPartner(from);
     setIncomingFrom(null);
-
-    // Get mic
+    isVideoCallRef.current = false;
     try {
       const mediaDevices = getMediaDevices();
-      if (!mediaDevices) {
-        crossInfo("Error", "Microphone not available");
-        socket.emit("private_call_reject", { targetNickname: from });
-        setCallState("idle");
-        return;
-      }
+      if (!mediaDevices) { crossInfo("Error", "Microphone not available"); socket.emit("private_call_reject", { targetNickname: from }); setCallStateSync("idle"); return; }
       const stream = await mediaDevices.getUserMedia({ audio: true, video: false });
       localStreamRef.current = stream;
+      setLocalStream(stream);
     } catch {
       crossInfo("Error", "Could not access microphone");
       socket.emit("private_call_reject", { targetNickname: from });
-      setCallState("idle");
+      setCallStateSync("idle");
       return;
     }
-
-    // Create PC and wait for offer
-    const pc = createPC(from);
-    if (!pc) {
-      setCallState("idle");
-      return;
-    }
+    const pc = createPC(from, false);
+    if (!pc) { setCallStateSync("idle"); return; }
     pcRef.current = pc;
-
-    // Add local tracks
     if (localStreamRef.current) {
-      if (pc.addStream) {
-        pc.addStream(localStreamRef.current);
-      } else {
-        localStreamRef.current.getTracks().forEach((track: any) => {
-          pc.addTrack(track, localStreamRef.current);
-        });
-      }
+      if (pc.addStream) { pc.addStream(localStreamRef.current); }
+      else { localStreamRef.current.getTracks().forEach((t: any) => pc.addTrack(t, localStreamRef.current)); }
     }
+    socket.emit("private_call_accept", { targetNickname: from, isVideo: false });
+    setCallStateSync("connected");
+  }, [incomingFrom, socket, createPC, setCallStateSync]);
 
-    // Tell caller we accepted — they will send the WebRTC offer
-    socket.emit("private_call_accept", { targetNickname: from });
-    setCallState("connected");
-  }, [incomingFrom, socket, createPC]);
+  // ── Accept an incoming video call ──
+  const acceptVideoCall = useCallback(async () => {
+    if (!incomingFrom || !socket) return;
+    const from = incomingFrom;
+    if (ringTimeoutRef.current) { clearTimeout(ringTimeoutRef.current); ringTimeoutRef.current = null; }
+    setCallPartner(from);
+    setIncomingFrom(null);
+    isVideoCallRef.current = true;
+    try {
+      const mediaDevices = getMediaDevices();
+      if (!mediaDevices) { crossInfo("Error", "Camera/microphone not available"); socket.emit("private_call_reject", { targetNickname: from }); setCallStateSync("idle"); return; }
+      const stream = await mediaDevices.getUserMedia({ audio: true, video: true });
+      localStreamRef.current = stream;
+      setLocalStream(stream);
+    } catch {
+      crossInfo("Error", "Could not access camera/microphone");
+      socket.emit("private_call_reject", { targetNickname: from });
+      setCallStateSync("idle");
+      return;
+    }
+    const pc = createPC(from, true);
+    if (!pc) { setCallStateSync("idle"); return; }
+    pcRef.current = pc;
+    if (localStreamRef.current) {
+      if (pc.addStream) { pc.addStream(localStreamRef.current); }
+      else { localStreamRef.current.getTracks().forEach((t: any) => pc.addTrack(t, localStreamRef.current)); }
+    }
+    socket.emit("private_call_accept", { targetNickname: from, isVideo: true });
+    setCallStateSync("connected_video");
+  }, [incomingFrom, socket, createPC, setCallStateSync]);
 
-  // Reject an incoming call
+  // ── Reject an incoming call ──
   const rejectCall = useCallback(() => {
     if (!incomingFrom || !socket) return;
     socket.emit("private_call_reject", { targetNickname: incomingFrom });
     setIncomingFrom(null);
-    setCallState("idle");
-    if (ringTimeoutRef.current) {
-      clearTimeout(ringTimeoutRef.current);
-      ringTimeoutRef.current = null;
-    }
-  }, [incomingFrom, socket]);
+    setCallStateSync("idle");
+    if (ringTimeoutRef.current) { clearTimeout(ringTimeoutRef.current); ringTimeoutRef.current = null; }
+  }, [incomingFrom, socket, setCallStateSync]);
 
-  // End an active call
+  // ── End an active call ──
   const endCall = useCallback(() => {
     if (!socket || !callPartner) return;
     socket.emit("private_call_end", { targetNickname: callPartner });
     cleanup();
-    setCallState("idle");
+    setCallStateSync("idle");
     setCallPartner(null);
-  }, [socket, callPartner, cleanup]);
+  }, [socket, callPartner, cleanup, setCallStateSync]);
 
-  // Handle socket events
+  // ── Socket event handlers ──
   useEffect(() => {
     if (!socket) return;
 
-    const handleIncoming = ({ fromNickname }: { fromNickname: string }) => {
+    const handleIncoming = ({ fromNickname, isVideo }: { fromNickname: string; isVideo?: boolean }) => {
       if (callStateRef.current !== "idle") {
-        // Already in a call — auto-reject
         socket.emit("private_call_reject", { targetNickname: fromNickname });
         return;
       }
+      isVideoCallRef.current = !!isVideo;
       setIncomingFrom(fromNickname);
-      setCallStateSync("incoming");
-
-      // Auto-reject after 30 seconds if not answered
+      setCallStateSync(isVideo ? "incoming_video" : "incoming");
       ringTimeoutRef.current = setTimeout(() => {
         socket.emit("private_call_reject", { targetNickname: fromNickname });
         setIncomingFrom(null);
@@ -276,44 +301,29 @@ export function usePrivateCall() {
       }, 30000);
     };
 
-    const handleAccepted = async ({ fromNickname }: { fromNickname: string }) => {
-      // The callee accepted — now we (the caller) initiate WebRTC
-      if (ringTimeoutRef.current) {
-        clearTimeout(ringTimeoutRef.current);
-        ringTimeoutRef.current = null;
-      }
-
+    const handleAccepted = async ({ fromNickname, isVideo }: { fromNickname: string; isVideo?: boolean }) => {
+      if (ringTimeoutRef.current) { clearTimeout(ringTimeoutRef.current); ringTimeoutRef.current = null; }
+      const withVideo = !!isVideo;
       try {
         const mediaDevices = getMediaDevices();
-        if (!mediaDevices) {
-          crossInfo("Error", "Microphone not available");
-          endCall();
-          return;
-        }
-        const stream = await mediaDevices.getUserMedia({ audio: true, video: false });
+        if (!mediaDevices) { crossInfo("Error", withVideo ? "Camera/microphone not available" : "Microphone not available"); endCall(); return; }
+        const stream = await mediaDevices.getUserMedia({ audio: true, video: withVideo });
         localStreamRef.current = stream;
+        setLocalStream(stream);
       } catch {
-        crossInfo("Error", "Could not access microphone");
+        crossInfo("Error", withVideo ? "Could not access camera/microphone" : "Could not access microphone");
         endCall();
         return;
       }
-
-      const pc = createPC(fromNickname);
+      const pc = createPC(fromNickname, withVideo);
       if (!pc) { endCall(); return; }
       pcRef.current = pc;
-
       if (localStreamRef.current) {
-        if (pc.addStream) {
-          pc.addStream(localStreamRef.current);
-        } else {
-          localStreamRef.current.getTracks().forEach((track: any) => {
-            pc.addTrack(track, localStreamRef.current);
-          });
-        }
+        if (pc.addStream) { pc.addStream(localStreamRef.current); }
+        else { localStreamRef.current.getTracks().forEach((t: any) => pc.addTrack(t, localStreamRef.current)); }
       }
-
       try {
-        const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: false });
+        const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: withVideo });
         await pc.setLocalDescription(offer);
         socket.emit("private_webrtc_offer", { targetNickname: fromNickname, offer });
       } catch (err) {
@@ -324,16 +334,16 @@ export function usePrivateCall() {
 
     const handleRejected = ({ fromNickname, reason }: { fromNickname: string; reason: string }) => {
       cleanup();
-      setCallState("idle");
+      setCallStateSync("idle");
       setCallPartner(null);
       crossInfo("Call Declined", reason || `${fromNickname} declined the call.`);
     };
 
     const handleEnded = ({ fromNickname }: { fromNickname: string }) => {
       cleanup();
-      setCallState("ended");
+      setCallStateSync("ended");
       setCallPartner(null);
-      setTimeout(() => setCallState("idle"), 1500);
+      setTimeout(() => setCallStateSync("idle"), 1500);
     };
 
     const handleOffer = async ({ fromNickname, offer }: { fromNickname: string; offer: any }) => {
@@ -391,12 +401,10 @@ export function usePrivateCall() {
       socket.off("private_webrtc_answer", handleAnswer);
       socket.off("private_webrtc_ice", handleIce);
     };
-  }, [socket, callState, createPC, cleanup, endCall]);
+  }, [socket, createPC, cleanup, endCall, setCallStateSync]);
 
   useEffect(() => {
-    return () => {
-      cleanup();
-    };
+    return () => { cleanup(); };
   }, [cleanup]);
 
   const formatDuration = (secs: number) => {
@@ -410,8 +418,12 @@ export function usePrivateCall() {
     callPartner,
     incomingFrom,
     callDuration: formatDuration(callDuration),
+    localStream,
+    remoteStream,
     startCall,
+    startVideoCall,
     acceptCall,
+    acceptVideoCall,
     rejectCall,
     endCall,
   };

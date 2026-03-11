@@ -487,7 +487,7 @@ export function initSocketServer(httpServer: HttpServer) {
     });
 
     // ── Private voice call signaling ─────────────────────────────────────────
-    socket.on("private_call_request", ({ targetNickname }: { targetNickname: string }) => {
+    socket.on("private_call_request", ({ targetNickname, isVideo }: { targetNickname: string; isVideo?: boolean }) => {
       const caller = activeUsers.get(socket.id);
       if (!caller) return;
       // Cross-room: find by nickname only (no room restriction)
@@ -495,20 +495,20 @@ export function initSocketServer(httpServer: HttpServer) {
         (u) => u.nickname.toLowerCase() === targetNickname.toLowerCase()
       );
       if (target) {
-        io.to(target.socketId).emit("private_call_incoming", { fromNickname: caller.nickname });
+        io.to(target.socketId).emit("private_call_incoming", { fromNickname: caller.nickname, isVideo: !!isVideo });
       } else {
         socket.emit("private_call_rejected", { fromNickname: targetNickname, reason: "User not found or offline" });
       }
     });
 
-    socket.on("private_call_accept", ({ targetNickname }: { targetNickname: string }) => {
+    socket.on("private_call_accept", ({ targetNickname, isVideo }: { targetNickname: string; isVideo?: boolean }) => {
       const accepter = activeUsers.get(socket.id);
       if (!accepter) return;
       const target = Array.from(activeUsers.values()).find(
         (u) => u.nickname.toLowerCase() === targetNickname.toLowerCase()
       );
       if (target) {
-        io.to(target.socketId).emit("private_call_accepted", { fromNickname: accepter.nickname });
+        io.to(target.socketId).emit("private_call_accepted", { fromNickname: accepter.nickname, isVideo: !!isVideo });
       }
     });
 
