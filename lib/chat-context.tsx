@@ -106,6 +106,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       // Step 1: Restore nickname first (needed for per-user cleared_at key)
       const n = await AsyncStorage.getItem("later_nickname");
+      console.log('[ChatContext] Init: nickname from storage =', n);
 
       // Step 2: Restore cleared-at timestamp (per-user key)
       if (n) {
@@ -117,7 +118,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         nicknameRef.current = n;
         // Auto-connect socket so user appears online immediately on app open
         const apiBase = getApiBaseUrl();
+        console.log('[ChatContext] Init: apiBase =', apiBase, '| socketRef.current?.connected =', socketRef.current?.connected);
         if (!socketRef.current?.connected) {
+          console.log('[ChatContext] Init: calling io() with', apiBase);
           const s = io(apiBase, {
             path: "/api/socket",
             transports: ["websocket", "polling"],
