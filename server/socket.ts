@@ -6,9 +6,6 @@ import { eq } from "drizzle-orm";
 import {
   SUPER_ADMIN_NICKNAME,
   isSuperAdminNickname,
-  isSuperAdminPasswordSet,
-  setSuperAdminPassword,
-  verifySuperAdminPassword,
   isUserBanned,
   banUser,
   unbanUser,
@@ -17,7 +14,6 @@ import {
   demoteUser,
   getUserRole,
   getAllModerators,
-  sendPasswordResetEmail,
 } from "./super-admin";
 
 // In-memory store for active users in the room
@@ -123,17 +119,6 @@ export function initSocketServer(httpServer: HttpServer) {
     // ── Join room ─────────────────────────────────────────────────────────────
     socket.on("join_room", async ({ nickname, roomId, token }: { nickname: string; roomId: number; token?: string }) => {
       try {
-        // Block reserved super admin nicknames from being used by others
-        if (isSuperAdminNickname(nickname)) {
-          // Store the pending nickname so super_admin_auth can use it
-          pendingSuperAdminNicknames.set(socket.id, nickname);
-          // The actual super admin will authenticate separately via "super_admin_auth"
-          socket.emit("require_super_admin_auth", {
-            isPasswordSet: await isSuperAdminPasswordSet(),
-          });
-          return;
-        }
-
         // Check if user is fully banned (not just voice-banned)
         const banStatus = await isUserBanned(nickname, ipAddress);
         if (banStatus.banned && !banStatus.voiceBanOnly) {
@@ -163,11 +148,15 @@ export function initSocketServer(httpServer: HttpServer) {
           (u) => u.nickname.toLowerCase() === nickname.toLowerCase() && u.roomId === roomId
         );
         if (existingUser) {
-          socket.emit("error", { message: "Nickname already taken in this room" });
-          return;
+          // Remove old entry for same nickname (reconnect scenario)
+          const oldEntry = Array.from(activeUsers.entries()).find(
+            ([, u]) => u.nickname.toLowerCase() === nickname.toLowerCase() && u.roomId === roomId
+          );
+          if (oldEntry) activeUsers.delete(oldEntry[0]);
         }
 
-        const role = await getUserRole(nickname);
+        // Auto-detect super admin by nickname — no password required
+        const role = isSuperAdminNickname(nickname) ? "super_admin" : await getUserRole(nickname);
 
         const user: ActiveUser = {
           socketId: socket.id,
@@ -205,7 +194,9 @@ export function initSocketServer(httpServer: HttpServer) {
           id: Date.now(),
           roomId,
           senderNickname: "system",
-          content: `${nickname} has entered the room.`,
+          content: role === "super_admin"
+            ? `${nickname} has entered the room. 👑`
+            : `${nickname} has entered the room.`,
           type: "system" as const,
           createdAt: new Date(),
         };
@@ -216,84 +207,6 @@ export function initSocketServer(httpServer: HttpServer) {
       } catch (err) {
         console.error("[Socket] join_room error:", err);
         socket.emit("error", { message: "Failed to join room" });
-      }
-    });
-
-    // ── Super Admin authentication ────────────────────────────────────────────
-    socket.on("super_admin_auth", async ({ password, isSetup, roomId }: { password: string; isSetup: boolean; roomId: number }) => {
-      try {
-        const passwordSet = await isSuperAdminPasswordSet();
-
-        if (isSetup && !passwordSet) {
-          // First-time setup
-          if (!password || password.length < 6) {
-            socket.emit("super_admin_auth_result", { success: false, message: "Password must be at least 6 characters" });
-            return;
-          }
-          await setSuperAdminPassword(password);
-          socket.emit("super_admin_auth_result", { success: true, message: "Super admin password set!" });
-        } else {
-          // Verify existing password
-          const valid = await verifySuperAdminPassword(password);
-          if (!valid) {
-            socket.emit("super_admin_auth_result", { success: false, message: "Incorrect password" });
-            return;
-          }
-          const pendingNick = pendingSuperAdminNicknames.get(socket.id) ?? SUPER_ADMIN_NICKNAME;
-          socket.emit("super_admin_auth_result", { success: true, message: `Welcome, ${pendingNick}!` });
-        }
-
-        // Now join the room as super admin
-        // Use the nickname the user typed (Ammar or Later), fallback to SUPER_ADMIN_NICKNAME
-        const superAdminNick = pendingSuperAdminNicknames.get(socket.id) ?? SUPER_ADMIN_NICKNAME;
-        pendingSuperAdminNicknames.delete(socket.id);
-        const existingUser = Array.from(activeUsers.values()).find(
-          (u) => isSuperAdminNickname(u.nickname) && u.roomId === roomId
-        );
-        if (existingUser) {
-          socket.emit("error", { message: "Super admin is already in the room" });
-          return;
-        }
-
-        const user: ActiveUser = {
-          socketId: socket.id,
-          nickname: superAdminNick,
-          roomId,
-          isMuted: true,
-          isVoiceActive: false,
-          isVoiceBanned: false,
-          isTextMuted: false,
-          role: "super_admin",
-          ipAddress,
-          joinedAt: new Date(),
-        };
-        activeUsers.set(socket.id, user);
-        socket.join(`room_${roomId}`);
-
-        const roomUsers = getRoomUsers(roomId);
-        const roomRecord2 = await getRoomById(roomId);
-        const roomName2 = roomRecord2?.name ?? "Now";
-        socket.emit("room_joined", { roomId, roomName: roomName2, nickname: superAdminNick, users: roomUsers });
-
-        const db = await getDb();
-        if (db) {
-          const recentMessages = await db.select().from(messages).where(eq(messages.roomId, roomId)).limit(50);
-          socket.emit("message_history", recentMessages);
-        }
-
-        const systemMsg = {
-          id: Date.now(),
-          roomId,
-          senderNickname: "system",
-          content: `${superAdminNick} has entered the room. 👑`,
-          type: "system" as const,
-          createdAt: new Date(),
-        };
-        io.to(`room_${roomId}`).emit("system_message", systemMsg);
-        io.to(`room_${roomId}`).emit("users_updated", roomUsers);
-      } catch (err) {
-        console.error("[Socket] super_admin_auth error:", err);
-        socket.emit("super_admin_auth_result", { success: false, message: "Authentication failed" });
       }
     });
 
@@ -512,6 +425,41 @@ export function initSocketServer(httpServer: HttpServer) {
       }
     });
 
+    // ── Invite to Room ──────────────────────────────────────────────────────
+    socket.on("invite_to_room", ({ targetNickname, roomId: inviteRoomId, roomName: inviteRoomName }: { targetNickname: string; roomId: number; roomName: string }) => {
+      const inviter = activeUsers.get(socket.id);
+      if (!inviter) return;
+      // Find target user anywhere (any room)
+      const targetEntry = Array.from(activeUsers.entries()).find(
+        ([, u]) => u.nickname === targetNickname
+      );
+      if (!targetEntry) {
+        socket.emit("error", { message: `${targetNickname} is not currently online` });
+        return;
+      }
+      const [targetSocketId] = targetEntry;
+      io.to(targetSocketId).emit("room_invite", {
+        fromNickname: inviter.nickname,
+        roomId: inviteRoomId,
+        roomName: inviteRoomName,
+      });
+      socket.emit("invite_sent", { targetNickname, roomName: inviteRoomName });
+      console.log(`[Socket] ${inviter.nickname} invited ${targetNickname} to room ${inviteRoomId} (${inviteRoomName})`);
+    });
+    socket.on("invite_response", ({ fromNickname, accepted }: { fromNickname: string; accepted: boolean }) => {
+      const responder = activeUsers.get(socket.id);
+      if (!responder) return;
+      const inviterEntry = Array.from(activeUsers.entries()).find(
+        ([, u]) => u.nickname === fromNickname
+      );
+      if (inviterEntry) {
+        const [inviterSocketId] = inviterEntry;
+        io.to(inviterSocketId).emit("invite_response_result", {
+          fromNickname: responder.nickname,
+          accepted,
+        });
+      }
+    });
     // ── Admin: kick user ──────────────────────────────────────────────────────
     socket.on("admin_kick", ({ targetNickname }: { targetNickname: string }) => {
       const admin = activeUsers.get(socket.id);
@@ -815,13 +763,6 @@ export function initSocketServer(httpServer: HttpServer) {
         socket.emit("error", { message: "Failed to switch room" });
       }
     });
-
-    // ── Admin: password reset email ───────────────────────────────────────────
-    socket.on("admin_request_password_reset", async () => {
-      const result = await sendPasswordResetEmail();
-      socket.emit("admin_action_result", result);
-    });
-
     // ── Disconnect ────────────────────────────────────────────────────────────
     socket.on("disconnect", () => {
       const user = activeUsers.get(socket.id);

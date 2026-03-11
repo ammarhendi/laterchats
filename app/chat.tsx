@@ -455,7 +455,7 @@ export default function ChatScreen() {
   };
 
   return (
-    <ScreenContainer containerClassName="bg-black" className="bg-black" edges={["top", "left", "right"]}>
+    <ScreenContainer containerClassName="bg-white" className="bg-white" edges={["top", "left", "right"]}>
       {/* Incoming PM notification banner */}
       {incomingPM && (
         <View style={styles.pmBanner}>
@@ -933,6 +933,10 @@ export default function ChatScreen() {
           </TouchableOpacity>
         </View>
       )}
+      {/* Copyright footer */}
+      <View style={styles.copyrightBar}>
+        <Text style={styles.copyrightBarText}>© {new Date().getFullYear()} Later. All rights reserved.</Text>
+      </View>
     </ScreenContainer>
   );
 }
@@ -1709,5 +1713,16 @@ const styles = StyleSheet.create({
     color: "#7B1FA2",
     fontSize: 12,
     fontWeight: "600" as const,
+  },
+  copyrightBar: {
+    backgroundColor: "#4A0072",
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+    alignItems: "center",
+  },
+  copyrightBarText: {
+    color: "rgba(255,255,255,0.6)",
+    fontSize: 10,
+    letterSpacing: 0.3,
   },
 });

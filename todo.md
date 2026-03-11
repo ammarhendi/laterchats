@@ -126,3 +126,10 @@
 - [x] Fix clear chat not working (messages not wiped for all users in the room)
 - [x] Full app review: test every screen and flow, fix all broken/confusing UX issues
 - [x] Add audio recording prevention: iOS app switcher blur + Android FLAG_SECURE blocks screen recording including audio capture
+
+## New Features (March 2026)
+- [x] Add copyright notice "© Later. All rights reserved." throughout the app interface
+- [x] Remove super admin password modal — auto-detect Ammar/Later on normal login
+- [x] Add Profile screen with photo upload, display name, status message
+- [x] Add avatar upload REST endpoint to server
+- [x] Wire Profile tab into tab navigation

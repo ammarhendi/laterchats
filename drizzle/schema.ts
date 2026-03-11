@@ -103,9 +103,24 @@ export const chatUsers = mysqlTable("chat_users", {
   resetTokenExpiresAt: timestamp("resetTokenExpiresAt"),
   failedLoginAttempts: int("failedLoginAttempts").default(0).notNull(),
   lockedUntil: timestamp("lockedUntil"),
+  displayName: varchar("displayName", { length: 64 }),
+  avatarUrl: varchar("avatarUrl", { length: 512 }),
+  statusMessage: varchar("statusMessage", { length: 128 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
 export type ChatUser = typeof chatUsers.$inferSelect;
 export type InsertChatUser = typeof chatUsers.$inferInsert;
+
+// Friends / contacts (Yahoo Messenger style)
+export const chatFriends = mysqlTable("chat_friends", {
+  id: int("id").autoincrement().primaryKey(),
+  requesterUsername: varchar("requesterUsername", { length: 64 }).notNull(),
+  recipientUsername: varchar("recipientUsername", { length: 64 }).notNull(),
+  status: mysqlEnum("status", ["pending", "accepted", "blocked"]).default("pending").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type ChatFriend = typeof chatFriends.$inferSelect;
+export type InsertChatFriend = typeof chatFriends.$inferInsert;

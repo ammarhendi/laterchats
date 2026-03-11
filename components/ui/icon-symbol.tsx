@@ -24,6 +24,10 @@ const MAPPING = {
   "person.fill": "person",
   "gearshape.fill": "settings",
   "xmark": "close",
+  "person.2.fill": "people",
+  "person.crop.circle": "account-circle",
+  "bell.fill": "notifications",
+  "star.fill": "star",
 } as IconMapping;
 
 /**

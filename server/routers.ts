@@ -141,13 +141,59 @@ export const appRouter = router({
       .input(z.object({ email: z.string().email() }))
       .mutation(async ({ input }) => {
         const result = await db.requestPasswordReset(input.email);
-        return { success: result.success, error: result.error };
+        if (result.success && result.token && result.username) {
+          const { sendPasswordResetEmail } = await import("./email.js");
+          await sendPasswordResetEmail(input.email, result.token, result.username);
+        }
+        // Always return success to prevent email enumeration
+        return { success: true };
       }),
 
     resetPassword: publicProcedure
       .input(z.object({ token: z.string(), newPassword: z.string().min(6) }))
       .mutation(async ({ input }) => {
         return db.resetPasswordWithToken(input.token, input.newPassword);
+      }),
+    getProfile: publicProcedure
+      .input(z.object({ username: z.string() }))
+      .query(async ({ input }) => {
+        return db.getChatUserProfile(input.username);
+      }),
+    updateProfile: publicProcedure
+      .input(z.object({
+        username: z.string(),
+        displayName: z.string().max(64).optional(),
+        avatarUrl: z.string().max(512).optional(),
+        statusMessage: z.string().max(128).optional(),
+      }))
+      .mutation(async ({ input }) => {
+        return db.updateChatUserProfile(input.username, {
+          displayName: input.displayName,
+          avatarUrl: input.avatarUrl,
+          statusMessage: input.statusMessage,
+        });
+      }),
+  }),
+  friends: router({
+    list: publicProcedure
+      .input(z.object({ username: z.string() }))
+      .query(async ({ input }) => {
+        return db.getFriends(input.username);
+      }),
+    sendRequest: publicProcedure
+      .input(z.object({ requesterUsername: z.string(), recipientUsername: z.string() }))
+      .mutation(async ({ input }) => {
+        return db.sendFriendRequest(input.requesterUsername, input.recipientUsername);
+      }),
+    respond: publicProcedure
+      .input(z.object({ recipientUsername: z.string(), requesterUsername: z.string(), accept: z.boolean() }))
+      .mutation(async ({ input }) => {
+        return db.respondFriendRequest(input.recipientUsername, input.requesterUsername, input.accept);
+      }),
+    remove: publicProcedure
+      .input(z.object({ username: z.string(), friendUsername: z.string() }))
+      .mutation(async ({ input }) => {
+        return db.removeFriend(input.username, input.friendUsername);
       }),
   }),
 });

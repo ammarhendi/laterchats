@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { eq, or, and } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, rooms, inviteTokens, messages, Room, InviteToken, Message, chatUsers } from "../drizzle/schema";
+import { InsertUser, users, rooms, inviteTokens, messages, Room, InviteToken, Message, chatUsers, chatFriends } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
@@ -324,7 +324,7 @@ export async function loginChatUser(
   return { success: true };
 }
 
-export async function requestPasswordReset(email: string): Promise<{ success: boolean; token?: string; error?: string }> {
+export async function requestPasswordReset(email: string): Promise<{ success: boolean; token?: string; username?: string; error?: string }> {
   email = sanitizeString(email, 320);
   const db = await getDb();
   if (!db) return { success: false, error: "Database not available" };
@@ -333,7 +333,7 @@ export async function requestPasswordReset(email: string): Promise<{ success: bo
   const token = crypto.randomBytes(32).toString("hex");
   const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
   await db.update(chatUsers).set({ resetToken: token, resetTokenExpiresAt: expiresAt }).where(eq(chatUsers.email, email));
-  return { success: true, token };
+  return { success: true, token, username: result[0].username };
 }
 
 export async function resetPasswordWithToken(token: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
@@ -350,5 +350,100 @@ export async function resetPasswordWithToken(token: string, newPassword: string)
   await db.update(chatUsers)
     .set({ passwordHash, resetToken: null, resetTokenExpiresAt: null, failedLoginAttempts: 0, lockedUntil: null })
     .where(eq(chatUsers.id, user.id));
+  return { success: true };
+}
+
+// ── Friends / contacts (Yahoo Messenger style) ─────────────────────────────
+
+export async function sendFriendRequest(requesterUsername: string, recipientUsername: string): Promise<{ success: boolean; error?: string }> {
+  if (requesterUsername === recipientUsername) return { success: false, error: "You cannot add yourself." };
+  const db = await getDb();
+  if (!db) return { success: false, error: "Database not available" };
+  // Check recipient exists
+  const recipient = await db.select().from(chatUsers).where(eq(chatUsers.username, recipientUsername)).limit(1);
+  if (!recipient.length) return { success: false, error: "User not found." };
+  // Check if already friends or pending
+  const existing = await db.select().from(chatFriends).where(
+    or(
+      and(eq(chatFriends.requesterUsername, requesterUsername), eq(chatFriends.recipientUsername, recipientUsername)),
+      and(eq(chatFriends.requesterUsername, recipientUsername), eq(chatFriends.recipientUsername, requesterUsername))
+    )
+  ).limit(1);
+  if (existing.length > 0) {
+    const s = existing[0].status;
+    if (s === "accepted") return { success: false, error: "Already friends." };
+    if (s === "pending") return { success: false, error: "Friend request already sent." };
+    if (s === "blocked") return { success: false, error: "Cannot send request." };
+  }
+  await db.insert(chatFriends).values({ requesterUsername, recipientUsername, status: "pending" });
+  return { success: true };
+}
+
+export async function respondFriendRequest(recipientUsername: string, requesterUsername: string, accept: boolean): Promise<{ success: boolean; error?: string }> {
+  const db = await getDb();
+  if (!db) return { success: false, error: "Database not available" };
+  const existing = await db.select().from(chatFriends).where(
+    and(eq(chatFriends.requesterUsername, requesterUsername), eq(chatFriends.recipientUsername, recipientUsername), eq(chatFriends.status, "pending"))
+  ).limit(1);
+  if (!existing.length) return { success: false, error: "No pending request found." };
+  if (accept) {
+    await db.update(chatFriends).set({ status: "accepted" }).where(eq(chatFriends.id, existing[0].id));
+  } else {
+    await db.delete(chatFriends).where(eq(chatFriends.id, existing[0].id));
+  }
+  return { success: true };
+}
+
+export async function getFriends(username: string): Promise<{ username: string; status: string; direction: string }[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.select().from(chatFriends).where(
+    or(eq(chatFriends.requesterUsername, username), eq(chatFriends.recipientUsername, username))
+  );
+  return rows.map((r) => ({
+    username: r.requesterUsername === username ? r.recipientUsername : r.requesterUsername,
+    status: r.status,
+    direction: r.requesterUsername === username ? "sent" : "received",
+  }));
+}
+
+export async function removeFriend(username: string, friendUsername: string): Promise<{ success: boolean }> {
+  const db = await getDb();
+  if (!db) return { success: false };
+  await db.delete(chatFriends).where(
+    or(
+      and(eq(chatFriends.requesterUsername, username), eq(chatFriends.recipientUsername, friendUsername)),
+      and(eq(chatFriends.requesterUsername, friendUsername), eq(chatFriends.recipientUsername, username))
+    )
+  );
+  return { success: true };
+}
+
+// ── Profile functions ──────────────────────────────────────────────────────────────────
+
+export async function getChatUserProfile(username: string): Promise<{ username: string; displayName: string | null; avatarUrl: string | null; statusMessage: string | null } | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select({
+    username: chatUsers.username,
+    displayName: chatUsers.displayName,
+    avatarUrl: chatUsers.avatarUrl,
+    statusMessage: chatUsers.statusMessage,
+  }).from(chatUsers).where(eq(chatUsers.username, username)).limit(1);
+  return result[0] ?? null;
+}
+
+export async function updateChatUserProfile(
+  username: string,
+  updates: { displayName?: string; avatarUrl?: string; statusMessage?: string }
+): Promise<{ success: boolean; error?: string }> {
+  const db = await getDb();
+  if (!db) return { success: false, error: "Database not available" };
+  const set: Record<string, string | null | undefined> = {};
+  if (updates.displayName !== undefined) set.displayName = updates.displayName || null;
+  if (updates.avatarUrl !== undefined) set.avatarUrl = updates.avatarUrl || null;
+  if (updates.statusMessage !== undefined) set.statusMessage = updates.statusMessage || null;
+  if (Object.keys(set).length === 0) return { success: true };
+  await db.update(chatUsers).set(set).where(eq(chatUsers.username, username));
   return { success: true };
 }

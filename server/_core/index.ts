@@ -10,6 +10,8 @@ import { initSocketServer, getIo } from "../socket";
 import * as db from "../db";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
+import multer from "multer";
+import { storagePut } from "../storage";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise((resolve) => {
@@ -101,6 +103,39 @@ async function startServer() {
 
   app.get("/api/health", (_req, res) => {
     res.json({ ok: true, timestamp: Date.now() });
+  });
+
+  // ── Avatar upload endpoint ────────────────────────────────────────────────
+  const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB max
+    fileFilter: (_req, file, cb) => {
+      if (file.mimetype.startsWith("image/")) cb(null, true);
+      else cb(new Error("Only image files are allowed"));
+    },
+  });
+
+  app.post("/api/upload-avatar", upload.single("file"), async (req, res) => {
+    try {
+      const username = req.body?.username;
+      if (!username) {
+        res.json({ success: false, error: "Username required" });
+        return;
+      }
+      if (!req.file) {
+        res.json({ success: false, error: "No file uploaded" });
+        return;
+      }
+      const ext = req.file.mimetype.split("/")[1] || "jpg";
+      const key = `avatars/${username.toLowerCase()}_${Date.now()}.${ext}`;
+      const { url } = await storagePut(key, req.file.buffer, req.file.mimetype);
+      // Update the user's avatarUrl in the database
+      await db.updateChatUserProfile(username, { avatarUrl: url });
+      res.json({ success: true, url });
+    } catch (err) {
+      console.error("[api/upload-avatar] error:", err);
+      res.json({ success: false, error: (err as Error).message });
+    }
   });
 
   // Simple direct clear-room endpoint - no tRPC, no socket, just DB + broadcast

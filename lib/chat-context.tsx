@@ -42,11 +42,8 @@ interface ChatContextType {
   isVoiceBanned: boolean;
   isTextMuted: boolean;
   // Auth
-  requireSuperAdminAuth: boolean;
-  superAdminPasswordSet: boolean;
   joinRoom: (nickname: string, roomId: number, token?: string) => void;
   switchRoom: (roomId: number) => void;
-  authenticateSuperAdmin: (password: string, isSetup: boolean) => void;
   leaveRoom: () => void;
   // Messaging
   sendMessage: (content: string) => void;
@@ -85,10 +82,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [isMuted, setIsMuted] = useState(true);
   const [isVoiceBanned, setIsVoiceBanned] = useState(false);
   const [isTextMuted, setIsTextMuted] = useState(false);
-  const [requireSuperAdminAuth, setRequireSuperAdminAuth] = useState(false);
-  const [superAdminPasswordSet, setSuperAdminPasswordSet] = useState(false);
   const [bannedList, setBannedList] = useState<ChatContextType["bannedList"]>([]);
-  // Pending join info for super admin (stored while waiting for auth)
   const pendingRoomIdRef = useRef<number | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const nicknameRef = useRef<string | null>(null);
@@ -141,7 +135,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       setRoomId(rId);
       if (rName) setRoomName(rName);
       setUsers(roomUsers);
-      setRequireSuperAdminAuth(false);
     });
 
     sock.on("message_history", (history: ChatMessage[]) => {
@@ -202,19 +195,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       setMessages([]);
     });
 
-    // Super admin auth flow
-    sock.on("require_super_admin_auth", ({ isPasswordSet }: { isPasswordSet: boolean }) => {
-      setRequireSuperAdminAuth(true);
-      setSuperAdminPasswordSet(isPasswordSet);
-    });
-
-    sock.on("super_admin_auth_result", ({ success, message }: { success: boolean; message: string }) => {
-      if (!success) {
-        Alert.alert("Authentication Failed", message);
-      }
-      // On success, room_joined will fire automatically
-    });
-
     // Admin events
     sock.on("kicked", ({ reason }: { reason: string }) => {
       Alert.alert("Kicked", reason);
@@ -260,6 +240,37 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
     sock.on("error", ({ message }: { message: string }) => {
       console.error("[Socket] Error:", message);
+    });
+    // ── Room Invite ────────────────────────────────────────────────────────────
+    sock.on("room_invite", ({ fromNickname, roomId: inviteRoomId, roomName: inviteRoomName }: { fromNickname: string; roomId: number; roomName: string }) => {
+      Alert.alert(
+        "📨 Room Invitation",
+        `${fromNickname} has invited you to join "${inviteRoomName}". Would you like to join?`,
+        [
+          {
+            text: "Decline",
+            style: "cancel",
+            onPress: () => sock.emit("invite_response", { fromNickname, accepted: false }),
+          },
+          {
+            text: "Join Room",
+            onPress: () => {
+              sock.emit("invite_response", { fromNickname, accepted: true });
+              sock.emit("switch_room", { newRoomId: inviteRoomId });
+            },
+          },
+        ]
+      );
+    });
+    sock.on("invite_sent", ({ targetNickname, roomName: inviteRoomName }: { targetNickname: string; roomName: string }) => {
+      Alert.alert("Invitation Sent", `Invitation sent to ${targetNickname} to join "${inviteRoomName}"!`);
+    });
+    sock.on("invite_response_result", ({ fromNickname, accepted }: { fromNickname: string; accepted: boolean }) => {
+      if (accepted) {
+        Alert.alert("Invitation Accepted", `${fromNickname} accepted your invitation and joined the room!`);
+      } else {
+        Alert.alert("Invitation Declined", `${fromNickname} declined your invitation.`);
+      }
     });
   }, []);
 
@@ -319,12 +330,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     sock.emit("switch_room", { roomId: newRoomId });
   }, []);
 
-  const authenticateSuperAdmin = useCallback((password: string, isSetup: boolean) => {
-    const rId = pendingRoomIdRef.current ?? 1;
-    socketRef.current?.emit("super_admin_auth", { password, isSetup, roomId: rId });
-    setMyRole("super_admin");
-  }, []);
-
   const leaveRoom = useCallback(() => {
     socketRef.current?.disconnect();
     socketRef.current = null;
@@ -339,7 +344,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     setIsMuted(true);
     setIsVoiceBanned(false);
     setIsTextMuted(false);
-    setRequireSuperAdminAuth(false);
     setMyRole("user");
     // Clear nickname so chat screen redirects back to home
     setNicknameState(null);
@@ -434,11 +438,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         isMuted,
         isVoiceBanned,
         isTextMuted,
-        requireSuperAdminAuth,
-        superAdminPasswordSet,
         joinRoom,
         switchRoom,
-        authenticateSuperAdmin,
         leaveRoom,
         sendMessage,
         sendPrivateMessage,

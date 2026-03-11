@@ -47,7 +47,7 @@ const YM = {
   online: "#43A047",
 };
 
-type Tab = "login" | "register" | "guest";
+type Tab = "login" | "register";
 type Screen = "auth" | "rooms";
 
 const FALLBACK_ROOMS: { id: number; name: string; description: string | null }[] = [
@@ -96,9 +96,6 @@ export default function WelcomeScreen() {
   const router = useRouter();
   const {
     joinRoom,
-    authenticateSuperAdmin,
-    requireSuperAdminAuth,
-    superAdminPasswordSet,
     nickname: currentNickname,
     roomId,
   } = useChat();
@@ -119,19 +116,20 @@ export default function WelcomeScreen() {
   const [regConfirmPassword, setRegConfirmPassword] = useState("");
   const [regDob, setRegDob] = useState("");
 
-  // Admin auth
-  const [adminPassword, setAdminPassword] = useState("");
-  const [adminConfirmPassword, setAdminConfirmPassword] = useState("");
-  const [showAdminAuth, setShowAdminAuth] = useState(false);
-  const [isSetup, setIsSetup] = useState(false);
-
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [showForgotPassword, setShowForgotPassword] = useState(false);
+   const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotStep, setForgotStep] = useState<"email" | "token">("email");
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotToken, setForgotToken] = useState("");
+  const [forgotNewPassword, setForgotNewPassword] = useState("");
+  const [forgotMsg, setForgotMsg] = useState("");
+  const [forgotLoading, setForgotLoading] = useState(false);
   const [pendingRoomId, setPendingRoomId] = useState<number | null>(null);
-
   const registerMutation = trpc.user.register.useMutation();
   const loginMutation = trpc.user.login.useMutation();
+  const requestPasswordResetMutation = trpc.user.requestPasswordReset.useMutation();
+  const resetPasswordMutation = trpc.user.resetPassword.useMutation();
   const { data: roomsData, isLoading: roomsLoading } = trpc.chat.getAllRooms.useQuery(undefined, { retry: 2 });
   const rooms = roomsData && roomsData.length > 0 ? roomsData : FALLBACK_ROOMS;
 
@@ -162,10 +160,6 @@ export default function WelcomeScreen() {
     if (!isMounted) return;
     if (currentNickname && roomId) router.replace("/chat" as any);
   }, [currentNickname, roomId, isMounted]);
-
-  useEffect(() => {
-    if (requireSuperAdminAuth) { setIsSetup(!superAdminPasswordSet); setShowAdminAuth(true); }
-  }, [requireSuperAdminAuth, superAdminPasswordSet]);
 
   const handleGuestJoin = () => {
     const nick = nicknameInput.trim();
@@ -229,26 +223,53 @@ export default function WelcomeScreen() {
     // or after super admin auth completes
   };
 
-  const handleAdminAuth = () => {
-    if (!adminPassword) { setError("Please enter your password"); return; }
-    if (isSetup && adminPassword !== adminConfirmPassword) { setError("Passwords do not match"); return; }
-    setError("");
-    authenticateSuperAdmin(adminPassword, isSetup);
-    setShowAdminAuth(false);
-    setAdminPassword("");
-    setAdminConfirmPassword("");
-    // Navigate to chat after super admin auth - roomId will be set by room_joined event
-    // The useEffect watching roomId will handle navigation
+  const handleForgotPassword = async () => {
+    const email = forgotEmail.trim();
+    if (!email) { setForgotMsg("Please enter your email address"); return; }
+    setForgotLoading(true);
+    setForgotMsg("");
+    try {
+      const result = await requestPasswordResetMutation.mutateAsync({ email });
+      if (result.success) {
+        setForgotMsg("✓ Reset email sent! Check your inbox and enter the token below.");
+        setForgotStep("token");
+      } else {
+        setForgotMsg((result as any).error || "No account found with that email.");
+      }
+    } catch (e: any) {
+      setForgotMsg(e?.message || "Failed to send reset email. Please try again.");
+    } finally {
+      setForgotLoading(false);
+    }
   };
-
-  const handleSuperAdminJoin = () => {
-    setError("");
-    const superNick = SUPER_ADMIN_NICKNAMES.some(n => n.toLowerCase() === nicknameInput.trim().toLowerCase())
-      ? nicknameInput.trim() : SUPER_ADMIN_NICKNAME;
-    setPendingNickname(superNick);
-    setScreen("rooms");
+  const handleResetPassword = async () => {
+    const token = forgotToken.trim();
+    const newPass = forgotNewPassword.trim();
+    if (!token || !newPass) { setForgotMsg("Please fill in both fields"); return; }
+    if (newPass.length < 6) { setForgotMsg("Password must be at least 6 characters"); return; }
+    setForgotLoading(true);
+    setForgotMsg("");
+    try {
+      const result = await resetPasswordMutation.mutateAsync({ token, newPassword: newPass });
+      if (result.success) {
+        setForgotMsg("✓ Password reset! You can now sign in.");
+        setTimeout(() => {
+          setShowForgotPassword(false);
+          setForgotStep("email");
+          setForgotEmail("");
+          setForgotToken("");
+          setForgotNewPassword("");
+          setForgotMsg("");
+        }, 2000);
+      } else {
+        setForgotMsg((result as any).error || "Invalid or expired token.");
+      }
+    } catch (e: any) {
+      setForgotMsg(e?.message || "Reset failed. Please try again.");
+    } finally {
+      setForgotLoading(false);
+    }
   };
-
   const handleShare = async () => {
     try { await Share.share({ title: "Join Later Chat", message: "Join Later Chat — later.chat" }); } catch {}
   };
@@ -301,33 +322,6 @@ export default function WelcomeScreen() {
           ItemSeparatorComponent={() => <View style={styles.roomSeparator} />}
         />
 
-        {/* Super Admin Auth Modal */}
-        <Modal visible={showAdminAuth} transparent animationType="fade" onRequestClose={() => { setShowAdminAuth(false); setAdminPassword(""); setAdminConfirmPassword(""); setError(""); }}>
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalBox}>
-              <ExpoLinearGradient colors={[YM.purpleDark, YM.purple]} style={styles.modalHeader}>
-                <Text style={styles.modalCrown}>👑</Text>
-                <Text style={styles.modalTitle}>{isSetup ? "Set Admin Password" : "Super Admin Login"}</Text>
-              </ExpoLinearGradient>
-              <View style={styles.modalBody}>
-                <Text style={styles.modalSubtitle}>
-                  {isSetup ? `Welcome, ${pendingNickname}! Set your password.` : "Enter your Super Admin password."}
-                </Text>
-                <TextInput style={styles.ymInput} value={adminPassword} onChangeText={setAdminPassword} placeholder="Password" placeholderTextColor={YM.midGray} secureTextEntry autoCapitalize="none" returnKeyType={isSetup ? "next" : "done"} onSubmitEditing={isSetup ? undefined : handleAdminAuth} />
-                {isSetup && (
-                  <TextInput style={styles.ymInput} value={adminConfirmPassword} onChangeText={setAdminConfirmPassword} placeholder="Confirm Password" placeholderTextColor={YM.midGray} secureTextEntry autoCapitalize="none" returnKeyType="done" onSubmitEditing={handleAdminAuth} />
-                )}
-                {error ? <Text style={styles.errorText}>{error}</Text> : null}
-                <TouchableOpacity style={styles.ymPrimaryBtn} onPress={handleAdminAuth} activeOpacity={0.8}>
-                  <Text style={styles.ymPrimaryBtnText}>{isSetup ? "Set Password & Enter" : "Sign In"}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.ymSecondaryBtn} onPress={() => { setShowAdminAuth(false); setAdminPassword(""); setAdminConfirmPassword(""); setError(""); setScreen("auth"); setPendingNickname(""); }}>
-                  <Text style={styles.ymSecondaryBtnText}>Cancel</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </Modal>
       </ScreenContainer>
     );
   }
@@ -356,16 +350,16 @@ export default function WelcomeScreen() {
           {/* White form area */}
           <View style={styles.ymFormArea}>
 
-            {/* Tab switcher — Login / Register / Guest */}
+            {/* Tab switcher — Login / Register */}
             <View style={styles.ymTabs}>
-              {(["login", "register", "guest"] as Tab[]).map((tab) => (
+              {(["login", "register"] as Tab[]).map((tab) => (
                 <TouchableOpacity
                   key={tab}
                   style={[styles.ymTab, activeTab === tab && styles.ymTabActive]}
                   onPress={() => { setActiveTab(tab); setError(""); }}
                 >
                   <Text style={[styles.ymTabText, activeTab === tab && styles.ymTabTextActive]}>
-                    {tab === "login" ? "Sign In" : tab === "register" ? "Sign Up" : "Guest"}
+                    {tab === "login" ? "Sign In" : "Sign Up"}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -468,42 +462,6 @@ export default function WelcomeScreen() {
               </View>
             )}
 
-            {/* GUEST */}
-            {activeTab === "guest" && (
-              <View style={styles.ymForm}>
-                <Text style={styles.ymFormTitle}>Join as Guest</Text>
-                <Text style={styles.ymFormSubtitle}>No account needed. Pick a nickname to start chatting.</Text>
-
-                <View style={styles.ymInputGroup}>
-                  <View style={styles.ymInputRow}>
-                    <Text style={styles.ymInputLabel}>Nickname</Text>
-                    <TextInput
-                      style={styles.ymInputField}
-                      value={nicknameInput}
-                      onChangeText={setNicknameInput}
-                      placeholder="Your nickname"
-                      placeholderTextColor={YM.midGray}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      returnKeyType="done"
-                      onSubmitEditing={handleGuestJoin}
-                      maxLength={32}
-                    />
-                  </View>
-                </View>
-
-                {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-                <TouchableOpacity style={styles.ymSignInBtn} onPress={handleGuestJoin} activeOpacity={0.85}>
-                  <Text style={styles.ymSignInBtnText}>Choose a Room →</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.ymSecondaryBtn} onPress={handleSuperAdminJoin}>
-                  <Text style={styles.ymSecondaryBtnText}>👑 Super Admin Login</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-
             <View style={styles.ymFooter}>
               <Text style={styles.ymFooterText}>18+ only · Conversations are private &amp; secure</Text>
             </View>
@@ -514,26 +472,81 @@ export default function WelcomeScreen() {
             <Text style={styles.ymShareBtnText}>📤  Invite Friends to Later!</Text>
           </TouchableOpacity>
 
+          {/* Copyright */}
+          <View style={styles.ymCopyright}>
+            <Text style={styles.ymCopyrightTitle}>Later!</Text>
+            <Text style={styles.ymCopyrightText}>© {new Date().getFullYear()} Later. All rights reserved.</Text>
+            <Text style={styles.ymCopyrightSub}>Later is a registered trademark. Unauthorized reproduction or distribution of this application, or any portion of it, may result in severe civil and criminal penalties.</Text>
+          </View>
 
         </ScrollView>
       </KeyboardAvoidingView>
 
       {/* Forgot Password Modal */}
-      <Modal visible={showForgotPassword} transparent animationType="fade" onRequestClose={() => setShowForgotPassword(false)}>
+      <Modal visible={showForgotPassword} transparent animationType="fade" onRequestClose={() => { setShowForgotPassword(false); setForgotStep("email"); setForgotEmail(""); setForgotToken(""); setForgotNewPassword(""); setForgotMsg(""); }}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
             <ExpoLinearGradient colors={[YM.purpleDark, YM.purple]} style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Forgot Password?</Text>
+              <Text style={styles.modalTitle}>Reset Password</Text>
             </ExpoLinearGradient>
             <View style={styles.modalBody}>
-              <Text style={styles.modalSubtitle}>
-                Please contact the Later! administrator to reset your password.{"\n\n"}
-                You can continue as a Guest while you wait.
-              </Text>
-              <TouchableOpacity style={styles.ymSignInBtn} onPress={() => { setShowForgotPassword(false); setActiveTab("guest"); }}>
-                <Text style={styles.ymSignInBtnText}>Continue as Guest</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.ymLinkBtn} onPress={() => setShowForgotPassword(false)}>
+              {forgotStep === "email" && (
+                <>
+                  <Text style={styles.modalSubtitle}>Enter your email address and we'll send you a reset link.</Text>
+                  <TextInput
+                    style={styles.ymInput}
+                    value={forgotEmail}
+                    onChangeText={setForgotEmail}
+                    placeholder="Your email address"
+                    placeholderTextColor={YM.midGray}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    returnKeyType="send"
+                    onSubmitEditing={handleForgotPassword}
+                  />
+                  {forgotMsg ? <Text style={[styles.errorText, forgotMsg.startsWith("✓") && { color: YM.online }]}>{forgotMsg}</Text> : null}
+                  <TouchableOpacity style={styles.ymSignInBtn} onPress={handleForgotPassword} activeOpacity={0.85} disabled={forgotLoading}>
+                    <Text style={styles.ymSignInBtnText}>{forgotLoading ? "Sending..." : "Send Reset Email"}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.ymLinkBtn} onPress={() => setForgotStep("token")}>
+                    <Text style={styles.ymLinkText}>I already have a reset token</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+              {forgotStep === "token" && (
+                <>
+                  <Text style={styles.modalSubtitle}>Enter the reset token from your email and choose a new password.</Text>
+                  <TextInput
+                    style={styles.ymInput}
+                    value={forgotToken}
+                    onChangeText={setForgotToken}
+                    placeholder="Reset token"
+                    placeholderTextColor={YM.midGray}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    returnKeyType="next"
+                  />
+                  <TextInput
+                    style={styles.ymInput}
+                    value={forgotNewPassword}
+                    onChangeText={setForgotNewPassword}
+                    placeholder="New password (min 6 chars)"
+                    placeholderTextColor={YM.midGray}
+                    secureTextEntry
+                    returnKeyType="done"
+                    onSubmitEditing={handleResetPassword}
+                  />
+                  {forgotMsg ? <Text style={[styles.errorText, forgotMsg.startsWith("✓") && { color: YM.online }]}>{forgotMsg}</Text> : null}
+                  <TouchableOpacity style={styles.ymSignInBtn} onPress={handleResetPassword} activeOpacity={0.85} disabled={forgotLoading}>
+                    <Text style={styles.ymSignInBtnText}>{forgotLoading ? "Resetting..." : "Reset Password"}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.ymLinkBtn} onPress={() => setForgotStep("email")}>
+                    <Text style={styles.ymLinkText}>← Back</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+              <TouchableOpacity style={styles.ymLinkBtn} onPress={() => { setShowForgotPassword(false); setForgotStep("email"); setForgotMsg(""); }}>
                 <Text style={styles.ymLinkText}>Close</Text>
               </TouchableOpacity>
             </View>
@@ -541,36 +554,9 @@ export default function WelcomeScreen() {
         </View>
       </Modal>
 
-      {/* Super Admin Auth Modal */}
-      <Modal visible={showAdminAuth} transparent animationType="fade" onRequestClose={() => { setShowAdminAuth(false); setAdminPassword(""); setAdminConfirmPassword(""); setError(""); }}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalBox}>
-            <ExpoLinearGradient colors={[YM.purpleDark, YM.purple]} style={styles.modalHeader}>
-              <Text style={styles.modalCrown}>👑</Text>
-              <Text style={styles.modalTitle}>{isSetup ? "Set Admin Password" : "Super Admin Login"}</Text>
-            </ExpoLinearGradient>
-            <View style={styles.modalBody}>
-              <Text style={styles.modalSubtitle}>
-                {isSetup ? `Welcome, ${pendingNickname}! Set your password.` : "Enter your Super Admin password."}
-              </Text>
-              <TextInput style={styles.ymInput} value={adminPassword} onChangeText={setAdminPassword} placeholder="Password" placeholderTextColor={YM.midGray} secureTextEntry autoCapitalize="none" returnKeyType={isSetup ? "next" : "done"} onSubmitEditing={isSetup ? undefined : handleAdminAuth} />
-              {isSetup && (
-                <TextInput style={styles.ymInput} value={adminConfirmPassword} onChangeText={setAdminConfirmPassword} placeholder="Confirm Password" placeholderTextColor={YM.midGray} secureTextEntry autoCapitalize="none" returnKeyType="done" onSubmitEditing={handleAdminAuth} />
-              )}
-              {error ? <Text style={styles.errorText}>{error}</Text> : null}
-              <TouchableOpacity style={styles.ymSignInBtn} onPress={handleAdminAuth} activeOpacity={0.8}>
-                <Text style={styles.ymSignInBtnText}>{isSetup ? "Set Password & Enter" : "Sign In"}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.ymLinkBtn} onPress={() => { setShowAdminAuth(false); setAdminPassword(""); setAdminConfirmPassword(""); setError(""); setScreen("auth"); setPendingNickname(""); }}>
-                <Text style={styles.ymLinkText}>Cancel</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-    </ScreenContainer>
-  );
-}
+      </ScreenContainer>
+    );
+  }
 
 const styles = StyleSheet.create({
   // Auth screen
@@ -666,4 +652,10 @@ const styles = StyleSheet.create({
   // Primary button (reuse ymSignInBtn above)
   ymPrimaryBtn: { backgroundColor: YM.purple, paddingVertical: 13, borderRadius: 8, alignItems: "center" },
   ymPrimaryBtnText: { color: YM.white, fontWeight: "700", fontSize: 16 },
+
+  // Copyright
+  ymCopyright: { alignItems: "center", paddingHorizontal: 24, paddingTop: 24, paddingBottom: 32, gap: 4 },
+  ymCopyrightTitle: { color: YM.purple, fontWeight: "800", fontSize: 16, letterSpacing: 0.5 },
+  ymCopyrightText: { color: YM.darkGray, fontSize: 12, fontWeight: "600" },
+  ymCopyrightSub: { color: YM.midGray, fontSize: 10, textAlign: "center", lineHeight: 15 },
 });
