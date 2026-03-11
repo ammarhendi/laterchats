@@ -3,13 +3,16 @@ import { Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { HapticTab } from "@/components/haptic-tab";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { useColors } from "@/hooks/use-colors";
+import { useChat } from "@/lib/chat-context";
 
 export default function TabLayout() {
-  const colors = useColors();
   const insets = useSafeAreaInsets();
   const bottomPadding = Platform.OS === "web" ? 12 : Math.max(insets.bottom, 8);
   const tabBarHeight = 56 + bottomPadding;
+
+  // Get unread counts for badges
+  const { unreadPMs, pendingFriendRequests } = useChat();
+  const totalUnreadPMs = Object.values(unreadPMs).reduce((sum, n) => sum + n, 0);
 
   return (
     <Tabs
@@ -39,6 +42,7 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => (
             <IconSymbol size={26} name="message.fill" color={color} />
           ),
+          tabBarBadge: totalUnreadPMs > 0 ? totalUnreadPMs : undefined,
         }}
       />
       <Tabs.Screen
@@ -48,6 +52,7 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => (
             <IconSymbol size={26} name="person.2.fill" color={color} />
           ),
+          tabBarBadge: pendingFriendRequests > 0 ? pendingFriendRequests : undefined,
         }}
       />
       <Tabs.Screen

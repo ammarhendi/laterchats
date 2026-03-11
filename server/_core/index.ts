@@ -36,6 +36,9 @@ async function startServer() {
   const app = express();
   const server = createServer(app);
 
+  // Trust proxy (needed for rate limiting behind reverse proxy)
+  app.set("trust proxy", 1);
+
   // ── Security: Helmet HTTP headers ────────────────────────────────────────────
   app.use(
     helmet({
@@ -169,6 +172,32 @@ async function startServer() {
       res.json({ success: true, url, mediaType });
     } catch (err) {
       console.error("[api/upload-media] error:", err);
+      res.json({ success: false, error: (err as Error).message });
+    }
+  });
+
+  // ── Profile video upload endpoint ────────────────────────────────────────
+  const videoUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 30 * 1024 * 1024 }, // 30MB max for 10s video
+    fileFilter: (_req, file, cb) => {
+      if (file.mimetype.startsWith("video/") || file.mimetype.startsWith("image/")) cb(null, true);
+      else cb(new Error("Only image and video files are allowed"));
+    },
+  });
+
+  app.post("/api/upload-profile-video", videoUpload.single("file"), async (req, res) => {
+    try {
+      const username = req.body?.username;
+      if (!username) { res.json({ success: false, error: "Username required" }); return; }
+      if (!req.file) { res.json({ success: false, error: "No file uploaded" }); return; }
+      const ext = req.file.mimetype.split("/")[1]?.replace("quicktime", "mov") || "mp4";
+      const key = `profile-videos/${username.toLowerCase()}_${Date.now()}.${ext}`;
+      const { url } = await storagePut(key, req.file.buffer, req.file.mimetype);
+      await db.updateChatUserProfile(username, { profileVideoUrl: url });
+      res.json({ success: true, url });
+    } catch (err) {
+      console.error("[api/upload-profile-video] error:", err);
       res.json({ success: false, error: (err as Error).message });
     }
   });

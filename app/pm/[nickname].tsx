@@ -311,17 +311,28 @@ export default function PrivateMessageScreen() {
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Text style={styles.backBtnText}>← Back</Text>
-          </TouchableOpacity>
-          <View style={styles.headerCenter}>
-            <View style={[styles.onlineDot, isTargetOnline ? styles.dotOnline : styles.dotOffline]} />
-            <Text style={styles.headerTitle}>{targetNickname}</Text>
+        {/* Yahoo Messenger-style window header */}
+        <View style={styles.ymHeader}>
+          {/* Title bar */}
+          <View style={styles.ymTitleBar}>
+            <Text style={styles.ymTitleBarText}>💬 {targetNickname} - Instant Message</Text>
+            <TouchableOpacity onPress={() => router.back()} style={styles.ymCloseBtn}>
+              <Text style={styles.ymCloseBtnText}>✕</Text>
+            </TouchableOpacity>
           </View>
-          <View style={styles.headerRight}>
-            <Text style={styles.e2eeLabel}>🔒 E2EE</Text>
+          {/* Contact info bar */}
+          <View style={styles.ymContactBar}>
+            <View style={styles.ymContactLeft}>
+              <View style={[styles.ymStatusDot, isTargetOnline ? styles.ymDotOnline : styles.ymDotOffline]} />
+              <View>
+                <Text style={styles.ymContactName}>{targetNickname}</Text>
+                <Text style={styles.ymContactStatus}>{isTargetOnline ? "Online" : "Offline"}</Text>
+              </View>
+            </View>
+            <View style={styles.ymContactRight}>
+              <Text style={styles.ymE2eeLabel}>🔒 E2EE</Text>
+              <Text style={styles.ymLaterLogo}>Later!</Text>
+            </View>
           </View>
         </View>
 
@@ -456,24 +467,106 @@ export default function PrivateMessageScreen() {
 }
 
 const styles = StyleSheet.create({
+  // Yahoo Messenger-style header
+  ymHeader: {
+    backgroundColor: "#7B0099",
+    borderBottomWidth: 2,
+    borderBottomColor: "#FFD700",
+  },
+  ymTitleBar: {
+    backgroundColor: "#5A0070",
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "space-between" as const,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+  },
+  ymTitleBarText: {
+    color: "#FFD700",
+    fontSize: 12,
+    fontWeight: "700" as const,
+    flex: 1,
+  },
+  ymCloseBtn: {
+    backgroundColor: "#CC0000",
+    width: 22,
+    height: 22,
+    borderRadius: 3,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    marginLeft: 8,
+  },
+  ymCloseBtnText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "900" as const,
+    lineHeight: 16,
+  },
+  ymContactBar: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "space-between" as const,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: "#7B0099",
+  },
+  ymContactLeft: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 10,
+  },
+  ymStatusDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.3)",
+  },
+  ymDotOnline: { backgroundColor: "#00FF00" },
+  ymDotOffline: { backgroundColor: "#888888" },
+  ymContactName: {
+    color: "#FFFFFF",
+    fontWeight: "bold" as const,
+    fontSize: 15,
+  },
+  ymContactStatus: {
+    color: "rgba(255,255,255,0.65)",
+    fontSize: 11,
+  },
+  ymContactRight: {
+    alignItems: "flex-end" as const,
+    gap: 2,
+  },
+  ymE2eeLabel: {
+    color: "#00FF88",
+    fontSize: 10,
+    fontWeight: "700" as const,
+  },
+  ymLaterLogo: {
+    color: "#FFD700",
+    fontWeight: "900" as const,
+    fontSize: 13,
+    letterSpacing: -0.3,
+  },
+  // Legacy (unused but kept for reference)
   header: {
     backgroundColor: "#7B0099",
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderBottomWidth: 2,
     borderBottomColor: "#FFD700",
   },
   backBtn: { paddingRight: 10 },
-  backBtnText: { color: "#FFD700", fontSize: 14, fontWeight: "600" },
-  headerCenter: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
+  backBtnText: { color: "#FFD700", fontSize: 14, fontWeight: "600" as const },
+  headerCenter: { flex: 1, flexDirection: "row" as const, alignItems: "center" as const, justifyContent: "center" as const, gap: 6 },
   onlineDot: { width: 8, height: 8, borderRadius: 4 },
   dotOnline: { backgroundColor: "#00FF00" },
   dotOffline: { backgroundColor: "#888" },
-  headerTitle: { color: "#fff", fontWeight: "bold", fontSize: 16 },
+  headerTitle: { color: "#fff", fontWeight: "bold" as const, fontSize: 16 },
   headerRight: { paddingLeft: 10 },
-  e2eeLabel: { color: "#00FF88", fontSize: 11, fontWeight: "700" },
+  e2eeLabel: { color: "#00FF88", fontSize: 11, fontWeight: "700" as const },
   secretBar: {
     backgroundColor: "#1a0a1a",
     flexDirection: "row",

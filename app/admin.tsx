@@ -44,7 +44,7 @@ function timeUntilExpiry(date: Date | string): string {
   return `${mins}m remaining`;
 }
 
-type AdminTab = "overview" | "users" | "bans" | "invite" | "rooms";
+type AdminTab = "overview" | "users" | "bans" | "invite" | "rooms" | "registrations";
 
 export default function AdminScreen() {
   const router = useRouter();
@@ -178,12 +178,19 @@ export default function AdminScreen() {
   const currentToken = generatedToken || latestInviteQuery.data?.token;
   const currentExpiry = generatedExpiry || (latestInviteQuery.data?.expiresAt ? new Date(latestInviteQuery.data.expiresAt) : null);
 
+  const SUPER_ADMIN_TOKEN = "ammar_clear_2024";
+  const registrationsQuery = trpc.admin.getAllRegistrations.useQuery(
+    { superAdminToken: SUPER_ADMIN_TOKEN },
+    { enabled: activeTab === "registrations" && isAdmin }
+  );
+
   const TABS: { id: AdminTab; label: string; icon: string }[] = [
     { id: "overview", label: "Overview", icon: "📊" },
     { id: "users", label: "Users", icon: "👥" },
     { id: "bans", label: "Bans", icon: "🚫" },
     { id: "invite", label: "Invite", icon: "🔗" },
     { id: "rooms", label: "Rooms", icon: "🏠" },
+    { id: "registrations", label: "Members", icon: "📝" },
   ];
 
   return (

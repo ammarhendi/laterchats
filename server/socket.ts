@@ -57,6 +57,12 @@ export function getActiveUserCount(roomId: number): number {
   return Array.from(activeUsers.values()).filter((u) => u.roomId === roomId).length;
 }
 
+export function getActiveUserByNickname(nickname: string): ActiveUser | undefined {
+  return Array.from(activeUsers.values()).find(
+    (u) => u.nickname.toLowerCase() === nickname.toLowerCase()
+  );
+}
+
 export function initSocketServer(httpServer: HttpServer) {
   const io = new SocketIOServer(httpServer, {
     cors: {
@@ -124,7 +130,9 @@ export function initSocketServer(httpServer: HttpServer) {
           const recentMessages = await db.select().from(messages).where(eq(messages.roomId, roomId)).limit(50);
           socket.emit("message_history", recentMessages);
         }
-        io.to(`room_${roomId}`).emit("users_updated", roomUsers);
+        const freshUsersAfterRejoin = getRoomUsers(roomId);
+        io.to(`room_${roomId}`).emit("users_updated", freshUsersAfterRejoin);
+        socket.emit("users_updated", freshUsersAfterRejoin);
         console.log(`[Socket] ${nickname} (${resolvedRole}) rejoined room ${roomId} after reconnect`);
       } catch (err) {
         console.error("[Socket] rejoin_room error:", err);
@@ -258,7 +266,11 @@ export function initSocketServer(httpServer: HttpServer) {
           createdAt: new Date(),
         };
         io.to(`room_${roomId}`).emit("system_message", systemMsg);
-        io.to(`room_${roomId}`).emit("users_updated", roomUsers);
+        // Get a fresh users list (not the stale snapshot from before async DB ops)
+        const freshRoomUsers = getRoomUsers(roomId);
+        io.to(`room_${roomId}`).emit("users_updated", freshRoomUsers);
+        // Also send a fresh list directly to the new joiner in case they missed the broadcast
+        socket.emit("users_updated", freshRoomUsers);
 
         console.log(`[Socket] ${nickname} (${role}) joined room ${roomId}`);
       } catch (err) {
@@ -881,7 +893,15 @@ export function initSocketServer(httpServer: HttpServer) {
         socket.emit("error", { message: "Failed to switch room" });
       }
     });
-    // ── Disconnect ────────────────────────────────────────────────────────────
+
+    // ── Request fresh users list ─────────────────────────────────────────────
+    socket.on("request_users", () => {
+      const user = activeUsers.get(socket.id);
+      if (!user) return;
+      socket.emit("users_updated", getRoomUsers(user.roomId));
+    });
+
+    // ── Disconnect ────────────────────────────────────────────────────────────────────────────────
     socket.on("disconnect", () => {
       // Clean up rate limit tracking for this socket
       socketMessageTimestamps.delete(socket.id);

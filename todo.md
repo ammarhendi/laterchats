@@ -171,3 +171,21 @@
 - [x] Photo/video sharing in private chat (pick from gallery or camera, upload to server, display inline)
 - [ ] Secret Camera in Secret Mode: take photo/video together, auto-burns after viewing, never stored on server
 - [x] Profile video support: pick or record a short video (max 10 seconds) as profile media, display as looping video on profile
+- [ ] Add Remember Password to login screen (save username+password in AsyncStorage)
+- [ ] Fix profile video upload not working
+- [ ] Fix Chatters panel username context menu (PM/Ignore/Add Friend/View Profile not working)
+- [ ] Add New Registrations tab to admin panel: show all registered users with username, email, registration date (no passwords)
+- [ ] CRITICAL: Fix PM delivery between friends — messages not arriving at recipient
+- [ ] Fix login screen text ("login to your profile" wrong message)
+- [ ] Add friend request notification — alert/badge when someone sends a friend request
+- [ ] Full notification system: PM badge on tab bar, friend request badge, friend accepted alert, offline messages banner on login
+- [ ] Fix PM routing globally by nickname (not room-scoped) so messages reach recipient in any room
+- [ ] Yahoo Messenger-style separate PM window: each conversation opens as its own screen with YM-style header
+- [x] Tab bar badges: unread PM count on Chat tab, pending friend requests on Friends tab
+- [x] In-app notification banners: new PM, friend request received, friend request accepted
+- [x] Remove all Yahoo! Chat / Yahoo Messenger references from app text
+- [x] Fix Exit button: actually exits the room and returns to home screen
+- [x] Help button: comprehensive dialog explaining all app features
+- [x] Per-user local Clear Chat: every user can clear their own local chat view
+- [x] Friend request socket notifications: real-time notification when someone sends you a friend request
+- [x] Fix online status sync bug: users not appearing in chatters list on other devices even though they show as "Online"

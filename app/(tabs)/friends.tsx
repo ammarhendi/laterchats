@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
@@ -46,7 +46,16 @@ function FriendAvatar({ username, avatarUrl, size = 44 }: { username: string; av
 }
 
 export default function FriendsScreen() {
-  const { nickname } = useChat();
+  const { nickname, pendingFriendRequests, dismissFriendRequest } = useChat();
+
+  // Reset the badge when the user views the Friends screen
+  useEffect(() => {
+    if (pendingFriendRequests > 0) {
+      // Clear the badge by dismissing all pending notifications
+      // (The actual count resets when they view the screen)
+      dismissFriendRequest();
+    }
+  }, []);
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [addUsername, setAddUsername] = useState("");
   const [addLoading, setAddLoading] = useState(false);
@@ -134,14 +143,14 @@ export default function FriendsScreen() {
 
   return (
     <ScreenContainer containerClassName="bg-white">
-      {/* Yahoo Messenger-style header */}
+      {/* Friends header */}
       <View style={styles.header}>
-        {/* YM logo bar */}
+        {/* Logo bar */}
         <View style={styles.headerLogoBar}>
           <View style={{ flexDirection: "row", alignItems: "baseline", gap: 1 }}>
             <Text style={styles.headerLogoText}>Later</Text>
             <Text style={[styles.headerLogoText, { color: YM_GOLD }]}>!</Text>
-            <Text style={[styles.headerLogoText, { color: "rgba(255,255,255,0.7)", fontSize: 13, fontWeight: "400" }]}> Messenger</Text>
+            <Text style={[styles.headerLogoText, { color: "rgba(255,255,255,0.7)", fontSize: 13, fontWeight: "400" }]}> Friends</Text>
           </View>
           <TouchableOpacity
             style={styles.addBtn}
@@ -199,7 +208,7 @@ export default function FriendsScreen() {
                 </View>
               )}
 
-              {/* Friends list — Yahoo Messenger group headers */}
+              {/* Friends list group headers */}
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionHeaderText}>🟡 Online ({accepted.filter((f: FriendEntry) => f.isOnline).length})</Text>
               </View>

@@ -184,6 +184,16 @@ export const appRouter = router({
         return db.changeChatUserPassword(input.username, input.currentPassword, input.newPassword);
       }),
   }),
+  admin: router({
+    getAllRegistrations: publicProcedure
+      .input(z.object({ superAdminToken: z.string() }))
+      .query(async ({ input }) => {
+        const expectedToken = process.env.SUPER_ADMIN_CLEAR_TOKEN || "ammar_clear_2024";
+        if (input.superAdminToken !== expectedToken) throw new Error("Unauthorized");
+        return db.getAllRegisteredUsers();
+      }),
+  }),
+
   friends: router({
     list: publicProcedure
       .input(z.object({ username: z.string() }))
@@ -193,7 +203,24 @@ export const appRouter = router({
     sendRequest: publicProcedure
       .input(z.object({ requesterUsername: z.string(), recipientUsername: z.string() }))
       .mutation(async ({ input }) => {
-        return db.sendFriendRequest(input.requesterUsername, input.recipientUsername);
+        const result = await db.sendFriendRequest(input.requesterUsername, input.recipientUsername);
+        // Notify recipient via socket if they are online
+        try {
+          const { getIo, getActiveUserByNickname } = await import("./socket");
+          const io = getIo();
+          if (io) {
+            // Find recipient's socket by nickname (they may be in any room)
+            const recipientSocket = getActiveUserByNickname(input.recipientUsername);
+            if (recipientSocket) {
+              io.to(recipientSocket.socketId).emit("friend_request_received", {
+                fromNickname: input.requesterUsername,
+              });
+            }
+          }
+        } catch {
+          // Socket notification is best-effort, don't fail the request
+        }
+        return result;
       }),
     respond: publicProcedure
       .input(z.object({ recipientUsername: z.string(), requesterUsername: z.string(), accept: z.boolean() }))

@@ -25,10 +25,11 @@ import { LinearGradient as ExpoLinearGradient } from "expo-linear-gradient";
 
 const SAVED_NICKNAME_KEY = "@later_saved_nickname";
 const SAVED_REGISTERED_USER_KEY = "@later_registered_user";
+const SAVED_PASSWORD_KEY = "@later_saved_password";
+const SAVED_REMEMBER_KEY = "@later_remember_me";
 const SUPER_ADMIN_NICKNAMES = ["Ammar", "Later"];
 const SUPER_ADMIN_NICKNAME = SUPER_ADMIN_NICKNAMES[0];
-
-// Yahoo Messenger color palette
+// ── Color palette
 const YM = {
   purple: "#7B1FA2",
   purpleDark: "#4A0072",
@@ -71,12 +72,12 @@ function RoomCard({ room, onPress }: { room: { id: number; name: string; descrip
   const count = countData?.count ?? 0;
   return (
     <TouchableOpacity style={styles.roomCard} onPress={onPress} activeOpacity={0.7}>
-      {/* Yahoo Chat folder icon */}
+      {/* Room folder icon */}
       <Text style={styles.roomFolderIcon}>📁</Text>
       <View style={styles.roomCardContent}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
           <Text style={styles.roomCardName}>{room.name}</Text>
-          {/* User count in brackets — classic Yahoo Chat style */}
+          {/* User count in brackets */}
           <Text style={styles.roomCardCount}>({count})</Text>
           {count > 0 && <View style={styles.onlineDot} />}
         </View>
@@ -103,6 +104,7 @@ export default function WelcomeScreen() {
   // Login state
   const [loginUsername, setLoginUsername] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
 
   // Register state
   const [regUsername, setRegUsername] = useState("");
@@ -144,8 +146,17 @@ export default function WelcomeScreen() {
 
   useEffect(() => {
     AsyncStorage.getItem(SAVED_NICKNAME_KEY).then((saved) => { if (saved) setNicknameInput(saved); }).catch(() => {});
-    AsyncStorage.getItem(SAVED_REGISTERED_USER_KEY).then((saved) => {
-      if (saved) { setLoginUsername(saved); setActiveTab("login"); }
+    // Load remembered credentials
+    Promise.all([
+      AsyncStorage.getItem(SAVED_REGISTERED_USER_KEY),
+      AsyncStorage.getItem(SAVED_REMEMBER_KEY),
+      AsyncStorage.getItem(SAVED_PASSWORD_KEY),
+    ]).then(([savedUser, savedRemember, savedPwd]) => {
+      if (savedUser) { setLoginUsername(savedUser); setActiveTab("login"); }
+      if (savedRemember === "true") {
+        setRememberMe(true);
+        if (savedPwd) setLoginPassword(savedPwd);
+      }
     }).catch(() => {});
   }, []);
 
@@ -176,6 +187,14 @@ export default function WelcomeScreen() {
       const result = await loginMutation.mutateAsync({ username, password: loginPassword });
       if (result.success) {
         AsyncStorage.setItem(SAVED_REGISTERED_USER_KEY, username).catch(() => {});
+        // Save or clear remembered password
+        if (rememberMe) {
+          AsyncStorage.setItem(SAVED_REMEMBER_KEY, "true").catch(() => {});
+          AsyncStorage.setItem(SAVED_PASSWORD_KEY, loginPassword).catch(() => {});
+        } else {
+          AsyncStorage.removeItem(SAVED_REMEMBER_KEY).catch(() => {});
+          AsyncStorage.removeItem(SAVED_PASSWORD_KEY).catch(() => {});
+        }
         setPendingNickname(username);
         setScreen("rooms");
       } else {
@@ -273,7 +292,7 @@ export default function WelcomeScreen() {
   if (screen === "rooms") {
     return (
       <ScreenContainer containerClassName="bg-white" safeAreaClassName="bg-white">
-        {/* Yahoo Chat-style header */}
+        {/* Chat header */}
         <ExpoLinearGradient
           colors={[YM.purpleDark, YM.purple, YM.purpleMid]}
           start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
@@ -301,7 +320,7 @@ export default function WelcomeScreen() {
           />
         </ExpoLinearGradient>
 
-        {/* Yahoo Chat-style info bar */}
+        {/* Info bar */}
         <View style={styles.roomInfoBar}>
           <Text style={styles.roomInfoBarText}>💬 Later! Public Rooms · The number next to each room shows how many chatters are inside. Tap to join.</Text>
         </View>
@@ -322,15 +341,13 @@ export default function WelcomeScreen() {
 
       </ScreenContainer>
     );
-  }
-
-  // ── Auth Screen — Yahoo Messenger Style ──────────────────────────────────
+  // ── Auth Screen ──────────────────────────────────────────────────────────────────────────────────────────
   return (
     <ScreenContainer containerClassName="bg-white" safeAreaClassName="bg-white">
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <ScrollView contentContainerStyle={styles.authScroll} keyboardShouldPersistTaps="handled">
 
-          {/* Purple gradient header with logo — exactly like YM */}
+          {/* Purple gradient header with logo */}
           <ExpoLinearGradient
             colors={[YM.purpleDark, YM.purple, YM.purpleMid]}
             start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
@@ -400,6 +417,18 @@ export default function WelcomeScreen() {
                 </View>
 
                 {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+                {/* Remember Me checkbox */}
+                <TouchableOpacity
+                  style={styles.rememberMeRow}
+                  onPress={() => setRememberMe(!rememberMe)}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
+                    {rememberMe && <Text style={styles.checkboxTick}>✓</Text>}
+                  </View>
+                  <Text style={styles.rememberMeText}>Remember my ID &amp; Password</Text>
+                </TouchableOpacity>
 
                 <TouchableOpacity style={styles.ymSignInBtn} onPress={handleLogin} activeOpacity={0.85} disabled={loading}>
                   {loading ? <ActivityIndicator color={YM.white} /> : <Text style={styles.ymSignInBtnText}>Sign In</Text>}
@@ -550,6 +579,7 @@ export default function WelcomeScreen() {
       </ScreenContainer>
     );
   }
+}
 
 const styles = StyleSheet.create({
   // Auth screen
@@ -623,7 +653,7 @@ const styles = StyleSheet.create({
   roomsList: { paddingBottom: 32 },
   roomSeparator: { height: 1, backgroundColor: YM.border, marginLeft: 72 },
 
-  // Room card — Yahoo Chat folder style
+  // Room card
   roomCard: { flexDirection: "row", alignItems: "center", backgroundColor: YM.white, paddingHorizontal: 14, paddingVertical: 11, gap: 10 },
   roomFolderIcon: { fontSize: 22, width: 30, textAlign: "center" },
   roomAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: YM.purple, alignItems: "center", justifyContent: "center" },
@@ -655,4 +685,9 @@ const styles = StyleSheet.create({
   ymCopyrightTitle: { color: YM.purple, fontWeight: "800", fontSize: 16, letterSpacing: 0.5 },
   ymCopyrightText: { color: YM.darkGray, fontSize: 12, fontWeight: "600" },
   ymCopyrightSub: { color: YM.midGray, fontSize: 10, textAlign: "center", lineHeight: 15 },
+  rememberMeRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 4, marginBottom: 4 },
+  checkbox: { width: 18, height: 18, borderRadius: 3, borderWidth: 1.5, borderColor: YM.purple, backgroundColor: "#fff", alignItems: "center", justifyContent: "center" },
+  checkboxChecked: { backgroundColor: YM.purple, borderColor: YM.purple },
+  checkboxTick: { color: "#fff", fontSize: 12, fontWeight: "bold", lineHeight: 16 },
+  rememberMeText: { color: YM.textLight, fontSize: 13 },
 });

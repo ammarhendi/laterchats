@@ -105,6 +105,7 @@ export const chatUsers = mysqlTable("chat_users", {
   lockedUntil: timestamp("lockedUntil"),
   displayName: varchar("displayName", { length: 64 }),
   avatarUrl: varchar("avatarUrl", { length: 512 }),
+  profileVideoUrl: varchar("profileVideoUrl", { length: 512 }),
   statusMessage: varchar("statusMessage", { length: 128 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

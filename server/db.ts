@@ -460,7 +460,7 @@ export async function getChatUserProfile(username: string): Promise<{ username: 
 
 export async function updateChatUserProfile(
   username: string,
-  updates: { displayName?: string; avatarUrl?: string; statusMessage?: string }
+  updates: { displayName?: string; avatarUrl?: string; statusMessage?: string; profileVideoUrl?: string }
 ): Promise<{ success: boolean; error?: string }> {
   const db = await getDb();
   if (!db) return { success: false, error: "Database not available" };
@@ -468,7 +468,30 @@ export async function updateChatUserProfile(
   if (updates.displayName !== undefined) set.displayName = updates.displayName || null;
   if (updates.avatarUrl !== undefined) set.avatarUrl = updates.avatarUrl || null;
   if (updates.statusMessage !== undefined) set.statusMessage = updates.statusMessage || null;
+  if (updates.profileVideoUrl !== undefined) set.profileVideoUrl = updates.profileVideoUrl || null;
   if (Object.keys(set).length === 0) return { success: true };
   await db.update(chatUsers).set(set).where(eq(chatUsers.username, username));
   return { success: true };
+}
+
+export async function getAllRegisteredUsers(): Promise<{
+  username: string;
+  email: string;
+  createdAt: Date | null;
+  displayName: string | null;
+  avatarUrl: string | null;
+}[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .select({
+      username: chatUsers.username,
+      email: chatUsers.email,
+      createdAt: chatUsers.createdAt,
+      displayName: chatUsers.displayName,
+      avatarUrl: chatUsers.avatarUrl,
+    })
+    .from(chatUsers)
+    .orderBy(chatUsers.createdAt);
+  return rows;
 }

@@ -135,20 +135,17 @@ export default function ProfileScreen() {
         name: `profile_video_${username}_${Date.now()}.${ext}`,
         type: mimeType,
       } as any);
-      formData.append("sender", username);
-      formData.append("isSecret", "false");
+      formData.append("username", username);
 
-      const response = await fetch(`${apiBase}/api/upload-media`, {
+      const response = await fetch(`${apiBase}/api/upload-profile-video`, {
         method: "POST",
         body: formData,
       });
       const data = await response.json();
       if (data.success && data.url) {
         setProfileVideoUrl(data.url);
-        await updateProfileMutation.mutateAsync({
-          username,
-          profileVideoUrl: data.url,
-        } as any);
+        // Also persist in AsyncStorage for offline access
+        AsyncStorage.setItem(`later_profile_video_${username.toLowerCase()}`, data.url).catch(() => {});
         refetch();
         Alert.alert("Success", "Profile video updated! It will loop on your profile.");
       } else {

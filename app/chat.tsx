@@ -214,6 +214,8 @@ export default function ChatScreen() {
     requestBannedList,
     bannedList,
     clearMessages,
+    incomingFriendRequest,
+    dismissFriendRequest,
   } = useChat();
   const { isVoiceEnabled, startVoice, stopVoice, error: voiceError } = useVoiceChat();
   const {
@@ -250,6 +252,7 @@ export default function ChatScreen() {
   const [userStatus, setUserStatus] = useState("I'm Available");
   const [showStatusPicker, setShowStatusPicker] = useState(false);
   const [fontName, setFontName] = useState("System");
+  const [showHelp, setShowHelp] = useState(false);
   const flatListRef = useRef<FlatList>(null);
 
   // Map font display names to actual font families
@@ -265,6 +268,15 @@ export default function ChatScreen() {
   const { switchRoom, roomId } = useChat();
   const { data: roomsData } = trpc.chat.getAllRooms.useQuery(undefined, { retry: 1 });
   const availableRooms = roomsData && roomsData.length > 0 ? roomsData : FALLBACK_ROOMS;
+  const sendFriendRequestMutation = trpc.friends.sendRequest.useMutation();
+
+  // Track the message count at the time of local clear, so new messages still appear
+  const [clearAtCount, setClearAtCount] = useState<number | null>(null);
+
+  // When localMessages is set (user cleared view), show only messages that arrived after the clear
+  const displayMessages = clearAtCount !== null
+    ? messages.slice(clearAtCount)
+    : messages;
 
   // isAdmin: check both myRole AND nickname — nickname is the ground truth for super admin
   const isAdmin = myRole === "super_admin" || (nickname ? isSuperAdminName(nickname) : false);
@@ -281,6 +293,11 @@ export default function ChatScreen() {
       router.replace("/" as any);
     }
   }, [nickname, isMounted]);
+
+  // Reset local clear when room changes
+  useEffect(() => {
+    setClearAtCount(null);
+  }, [roomId]);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -335,8 +352,42 @@ export default function ChatScreen() {
 
   const handleIgnore = () => {
     if (selectedUser?.role === "super_admin") return;
+    const name = selectedUser?.nickname;
+    if (!name) return;
+    setIgnoredUsers((prev) => prev.includes(name) ? prev : [...prev, name]);
     setShowUserModal(false);
-    Alert.alert("Ignored", `${selectedUser?.nickname} has been ignored.`);
+    Alert.alert("Ignored", `${name} has been added to your ignore list. Their messages will be hidden.`);
+  };
+
+  const handleAddFriend = () => {
+    if (!selectedUser || !nickname) return;
+    const targetNick = selectedUser.nickname;
+    setShowUserModal(false);
+    Alert.alert(
+      "Add Friend",
+      `Send a friend request to ${targetNick}?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Send Request",
+          onPress: async () => {
+            try {
+              const result = await sendFriendRequestMutation.mutateAsync({
+                requesterUsername: nickname,
+                recipientUsername: targetNick,
+              });
+              if (result.success) {
+                Alert.alert("Request Sent", `Friend request sent to ${targetNick}!`);
+              } else {
+                Alert.alert("Error", (result as any).error || "Could not send friend request.");
+              }
+            } catch {
+              Alert.alert("Error", "Could not send friend request. Make sure you are both registered users.");
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleKick = () => {
@@ -434,16 +485,25 @@ export default function ChatScreen() {
   };
 
   const handleLeave = () => {
-    Alert.alert("Leave Room", "Are you sure you want to leave the chat room?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Leave", style: "destructive", onPress: () => {
-          leaveRoom();
-          // Navigate immediately — don't rely on nickname useEffect
-          router.replace("/" as any);
-        }
-      },
-    ]);
+    leaveRoom();
+    router.replace("/" as any);
+  };
+
+  const handleLocalClearChat = () => {
+    Alert.alert(
+      "Clear My View",
+      "Clear all messages from your screen? This only clears your view — other users are not affected.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Clear",
+          style: "destructive",
+          onPress: () => {
+            setClearAtCount(messages.length);
+          },
+        },
+      ]
+    );
   };
 
   const handleClearChat = () => {
@@ -478,6 +538,22 @@ export default function ChatScreen() {
   return (
     <ScreenContainer containerClassName="bg-white" className="bg-white" edges={["top", "left", "right"]}>
       {/* Incoming PM notification banner */}
+      {incomingFriendRequest && (
+        <View style={[styles.pmBanner, { backgroundColor: "#1565C0" }]}>
+          <View style={styles.pmBannerContent}>
+            <Text style={styles.pmBannerTitle}>👤 Friend Request</Text>
+            <Text style={styles.pmBannerFrom}>{incomingFriendRequest.from} wants to be your friend!</Text>
+          </View>
+          <View style={styles.pmBannerActions}>
+            <TouchableOpacity style={styles.pmBannerReply} onPress={dismissFriendRequest}>
+              <Text style={styles.pmBannerReplyText}>View</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.pmBannerDismiss} onPress={dismissFriendRequest}>
+              <Text style={styles.pmBannerDismissText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
       {incomingPM && (
         <View style={styles.pmBanner}>
           <View style={styles.pmBannerContent}>
@@ -515,7 +591,7 @@ export default function ChatScreen() {
             You are in <Text style={styles.ymRoomTitleBold}>{roomName}</Text>
           </Text>
           <View style={styles.ymTopBarRight}>
-            <TouchableOpacity onPress={() => Alert.alert("Help", "Later! Chat Help\n\n• Click a username to PM, ignore, or report.\n• Use Voice: Talk to speak in the room.\n• Change Room to browse other rooms.\n• Exit to leave the chat.")}>
+            <TouchableOpacity onPress={() => setShowHelp(true)}>
               <Text style={styles.ymHelpLink}>Help</Text>
             </TouchableOpacity>
             <Text style={styles.ymTopBarSep}> - </Text>
@@ -554,6 +630,13 @@ export default function ChatScreen() {
           >
             <Text style={[styles.ymNavBtnText, styles.ymNavBtnHighlightText]}>⊕ Change Room</Text>
           </TouchableOpacity>
+          <View style={styles.ymNavSep} />
+          <TouchableOpacity
+            style={[styles.ymNavBtn, { backgroundColor: "#E8F5E9" }]}
+            onPress={handleLocalClearChat}
+          >
+            <Text style={[styles.ymNavBtnText, { color: "#2E7D32" }]}>Clear My View</Text>
+          </TouchableOpacity>
           {isAdmin && (
             <>
               <View style={styles.ymNavSep} />
@@ -561,7 +644,7 @@ export default function ChatScreen() {
                 style={[styles.ymNavBtn, { backgroundColor: "#C62828" }]}
                 onPress={handleClearChat}
               >
-                <Text style={[styles.ymNavBtnText, { color: "#fff" }]}>Clear Chat</Text>
+                <Text style={[styles.ymNavBtnText, { color: "#fff" }]}>Clear All</Text>
               </TouchableOpacity>
             </>
           )}
@@ -583,7 +666,7 @@ export default function ChatScreen() {
           <View style={styles.chatArea}>
             <FlatList
               ref={flatListRef}
-              data={messages}
+              data={displayMessages}
               keyExtractor={(item, idx) => `${item.id}-${idx}`}
               renderItem={({ item }) => (
                 <MessageItem msg={item} myNickname={nickname || ""} fontSize={fontSize} fontFamily={FONT_MAP[fontName]} />
@@ -814,6 +897,22 @@ export default function ChatScreen() {
               }}
             >
               <Text style={[styles.modalOptionText, { color: "#00CC88" }]}>📞 Private Voice Call</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.modalOption} onPress={handleAddFriend}>
+              <Text style={[styles.modalOptionText, { color: "#0066CC" }]}>👤 Add to Friends</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.modalOption}
+              onPress={() => {
+                setShowUserModal(false);
+                Alert.alert(
+                  `${selectedUser?.nickname}'s Profile`,
+                  `Username: ${selectedUser?.nickname}\nRole: ${selectedUser?.role || "user"}\nStatus: ${selectedUser?.isVoiceActive ? "🎙️ Voice Active" : "Online"}`,
+                  [{ text: "Close" }]
+                );
+              }}
+            >
+              <Text style={styles.modalOptionText}>👁️ View Profile</Text>
             </TouchableOpacity>
             {selectedUser?.role !== "super_admin" && (
               <TouchableOpacity style={styles.modalOption} onPress={handleIgnore}>
@@ -1077,7 +1176,7 @@ export default function ChatScreen() {
             </TouchableOpacity>
             <TouchableOpacity style={styles.modalOption} onPress={() => {
               setShowChatTools(false);
-              Alert.alert("Help", "Later! Chat Help\n\n• Tap a username in Chatters to PM, call, or ignore.\n• Use Voice: Talk to speak in the room.\n• Use Change Room to switch rooms.\n• Use Favorite Rooms for quick access.\n• Use Settings to adjust font size and sounds.");
+              setShowHelp(true);
             }}>
               <Text style={styles.modalOptionText}>❓ Help</Text>
             </TouchableOpacity>
@@ -1214,9 +1313,7 @@ export default function ChatScreen() {
             </TouchableOpacity>
           </View>
         </Pressable>
-      </Modal>
-
-      {/* ── Ignore List Modal ─────────────────────────────────────────────── */}
+      </Modal>      {/* ── Ignore List Modal ─────────────────────────────────────────────────── */}
       <Modal visible={showIgnoreList} transparent animationType="fade" onRequestClose={() => setShowIgnoreList(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalBox, { width: 300, maxHeight: "70%" }]}>
@@ -1244,8 +1341,126 @@ export default function ChatScreen() {
           </View>
         </View>
       </Modal>
-    </ScreenContainer>
-  );
+
+      {/* ── Help Modal ─────────────────────────────────────────────────────────────── */}
+      <Modal visible={showHelp} transparent animationType="slide" onRequestClose={() => setShowHelp(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalBox, { width: 340, maxHeight: "88%" }]}>
+            <View style={[styles.modalTitle, { backgroundColor: "#5A0070", flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 14, paddingVertical: 10 }]}>
+              <Text style={{ color: "#FFD700", fontWeight: "900", fontSize: 16 }}>❓ Later! Chat — Help</Text>
+              <TouchableOpacity onPress={() => setShowHelp(false)}>
+                <Text style={{ color: "#FFD700", fontSize: 18, fontWeight: "bold" }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={{ maxHeight: 520 }} contentContainerStyle={{ padding: 14, gap: 12 }}>
+
+              <Text style={styles.helpSectionTitle}>🌟 Welcome to Later! Chat</Text>
+              <Text style={styles.helpText}>
+                Later! Chat is a real-time group chat app for connecting with people. You can join chat rooms, send private messages, make voice calls, and connect with friends — all with end-to-end encryption.
+              </Text>
+
+              <View style={styles.helpDivider} />
+              <Text style={styles.helpSectionTitle}>💬 Chat Rooms</Text>
+              <Text style={styles.helpText}>
+                • <Text style={styles.helpBold}>10 rooms available</Text>: Now, Arab World, Issues, Social Media, Chilling Out, Dancing, Blah Blah, Nothing Hidden, For All, Random.{"\n"}
+                • Tap <Text style={styles.helpBold}>Change Room</Text> in the toolbar to switch rooms instantly.{"\n"}
+                • Tap <Text style={styles.helpBold}>Favorite Rooms</Text> to quickly access any room.{"\n"}
+                • All messages are fully secured and private 🔒
+              </Text>
+
+              <View style={styles.helpDivider} />
+              <Text style={styles.helpSectionTitle}>👤 Chatters Panel</Text>
+              <Text style={styles.helpText}>
+                • The right panel shows everyone currently in the room.{"\n"}
+                • <Text style={styles.helpBold}>Tap any username</Text> to open a menu with options:{"\n"}
+                  — 💬 Send a Private Message (PM){"\n"}
+                  — 📞 Start a Private Voice Call{"\n"}
+                  — 👤 Add to Friends{"\n"}
+                  — 👁️ View their Profile{"\n"}
+                  — 🚫 Ignore (hides their messages){"\n"}
+                • 🟢 Green dot = online, 🟠 Orange dot = voice active{"\n"}
+                • 👑 Crown = Super Admin, 🛡️ Shield = Moderator
+              </Text>
+
+              <View style={styles.helpDivider} />
+              <Text style={styles.helpSectionTitle}>💌 Private Messages (PM)</Text>
+              <Text style={styles.helpText}>
+                • Tap a user → <Text style={styles.helpBold}>Send Private Message</Text> to open a private chat.{"\n"}
+                • PMs are <Text style={styles.helpBold}>end-to-end encrypted (E2EE)</Text> — only you and the recipient can read them.{"\n"}
+                • A banner notification appears at the top when you receive a new PM.{"\n"}
+                • Tap <Text style={styles.helpBold}>Reply</Text> on the banner to open the conversation.{"\n"}
+                • 🔐 <Text style={styles.helpBold}>Secret Mode</Text>: Messages auto-delete after 5, 10, 30, or 60 seconds.{"\n"}
+                • 📎 Share photos and videos in private chats.
+              </Text>
+
+              <View style={styles.helpDivider} />
+              <Text style={styles.helpSectionTitle}>🎙️ Voice Chat</Text>
+              <Text style={styles.helpText}>
+                • Tap <Text style={styles.helpBold}>Talk</Text> in the voice bar to speak in the room.{"\n"}
+                • Enable <Text style={styles.helpBold}>Hands-free</Text> to stay in voice without holding.{"\n"}
+                • Your mic is independent — muting yourself does not affect others.{"\n"}
+                • 📞 <Text style={styles.helpBold}>Private Voice Call</Text>: Tap a user → Private Voice Call for a one-on-one call.
+              </Text>
+
+              <View style={styles.helpDivider} />
+              <Text style={styles.helpSectionTitle}>✍️ Text Formatting</Text>
+              <Text style={styles.helpText}>
+                • <Text style={{ fontWeight: "bold" }}>B</Text> = Bold text{"\n"}
+                • <Text style={{ fontStyle: "italic" }}>I</Text> = Italic text{"\n"}
+                • 😊 = Emoji picker{"\n"}
+                • Change font size and font name in <Text style={styles.helpBold}>Settings</Text>
+              </Text>
+
+              <View style={styles.helpDivider} />
+              <Text style={styles.helpSectionTitle}>👥 Friends</Text>
+              <Text style={styles.helpText}>
+                • Tap a user → <Text style={styles.helpBold}>Add to Friends</Text> to send a friend request.{"\n"}
+                • Go to the <Text style={styles.helpBold}>Friends tab</Text> to see your friends list, accept requests, and chat.{"\n"}
+                • Friends are shown as Online or Offline.
+              </Text>
+
+              <View style={styles.helpDivider} />
+              <Text style={styles.helpSectionTitle}>🗑️ Clear Chat</Text>
+              <Text style={styles.helpText}>
+                • <Text style={styles.helpBold}>Clear My View</Text>: Clears messages on your screen only. Other users are not affected.{"\n"}
+                • <Text style={styles.helpBold}>Clear All</Text> (Super Admin only): Wipes the chat room for everyone.
+              </Text>
+
+              <View style={styles.helpDivider} />
+              <Text style={styles.helpSectionTitle}>🚪 Exit</Text>
+              <Text style={styles.helpText}>
+                • Tap <Text style={styles.helpBold}>Exit</Text> in the top bar to leave the chat room and return to the home screen.{"\n"}
+                • You can rejoin any room at any time.
+              </Text>
+
+              <View style={styles.helpDivider} />
+              <Text style={styles.helpSectionTitle}>🔒 Privacy & Security</Text>
+              <Text style={styles.helpText}>
+                • All private messages use <Text style={styles.helpBold}>ECDH P-256 + AES-GCM 256-bit</Text> end-to-end encryption.{"\n"}
+                • Screenshots and screen recording are blocked for your privacy.{"\n"}
+                • All conversations are fully secured and private.
+              </Text>
+
+              <View style={styles.helpDivider} />
+              <Text style={styles.helpSectionTitle}>👑 Admin & Moderation</Text>
+              <Text style={styles.helpText}>
+                • Super Admins can kick, ban, voice-ban, or mute users.{"\n"}
+                • Moderators can kick and mute users.{"\n"}
+                • Access admin tools via <Text style={styles.helpBold}>Chat Tools → Admin Panel</Text> or the Mod button.
+              </Text>
+
+              <View style={{ height: 8 }} />
+              <Text style={[styles.helpText, { textAlign: "center", color: "#999", fontSize: 11 }]}>
+                © Later. All rights reserved.{"\n"}Version 1.0 · All conversations are fully secured &amp; private 🔒
+              </Text>
+            </ScrollView>
+            <TouchableOpacity style={styles.modalCancel} onPress={() => setShowHelp(false)}>
+              <Text style={styles.modalCancelText}>Close Help</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </ScreenContainer> );
 }
 
 const styles = StyleSheet.create({
@@ -2325,5 +2540,27 @@ const styles = StyleSheet.create({
     fontWeight: "600" as const,
     minWidth: 36,
     textAlign: "center" as const,
+  },
+  // Help modal styles
+  helpSectionTitle: {
+    color: "#5A0070",
+    fontSize: 14,
+    fontWeight: "700" as const,
+    marginTop: 4,
+    marginBottom: 2,
+  },
+  helpText: {
+    color: "#333333",
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  helpBold: {
+    fontWeight: "700" as const,
+    color: "#5A0070",
+  },
+  helpDivider: {
+    height: 1,
+    backgroundColor: "#EDE7F6",
+    marginVertical: 6,
   },
 });

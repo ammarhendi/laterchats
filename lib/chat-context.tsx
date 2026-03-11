@@ -39,6 +39,9 @@ interface ChatContextType {
   unreadPMs: Record<string, number>;
   incomingPM: { from: string; preview: string } | null;
   dismissIncomingPM: () => void;
+  pendingFriendRequests: number;
+  incomingFriendRequest: { from: string } | null;
+  dismissFriendRequest: () => void;
   isMuted: boolean;
   isVoiceBanned: boolean;
   isTextMuted: boolean;
@@ -84,6 +87,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [isVoiceBanned, setIsVoiceBanned] = useState(false);
   const [isTextMuted, setIsTextMuted] = useState(false);
   const [bannedList, setBannedList] = useState<ChatContextType["bannedList"]>([]);
+  const [pendingFriendRequests, setPendingFriendRequests] = useState(0);
+  const [incomingFriendRequest, setIncomingFriendRequest] = useState<{ from: string } | null>(null);
   const pendingRoomIdRef = useRef<number | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const nicknameRef = useRef<string | null>(null);
@@ -104,6 +109,10 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const dismissIncomingPM = useCallback(() => setIncomingPM(null), []);
+  const dismissFriendRequest = useCallback(() => {
+    setIncomingFriendRequest(null);
+    setPendingFriendRequests(0);
+  }, []);
 
   const markPMRead = useCallback((fromNickname: string) => {
     setUnreadPMs((prev) => {
@@ -303,6 +312,13 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         Alert.alert("Invitation Declined", `${fromNickname} declined your invitation.`);
       }
     });
+
+    // Friend request notification
+    sock.on("friend_request_received", ({ fromNickname }: { fromNickname: string }) => {
+      setPendingFriendRequests((prev) => prev + 1);
+      setIncomingFriendRequest({ from: fromNickname });
+      setTimeout(() => setIncomingFriendRequest(null), 6000);
+    });
   }, []);
 
   const initSocket = useCallback(() => {
@@ -322,6 +338,17 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     setSocket(newSocket);
     return newSocket;
   }, [setupSocketListeners]);
+
+  // Periodically request a fresh users list to keep online status accurate
+  useEffect(() => {
+    if (!roomId || !socketRef.current?.connected) return;
+    const interval = setInterval(() => {
+      if (socketRef.current?.connected) {
+        socketRef.current.emit("request_users");
+      }
+    }, 30000); // every 30 seconds
+    return () => clearInterval(interval);
+  }, [roomId]);
 
   const joinRoom = useCallback((nick: string, rId: number, token?: string) => {
     setMessages([]);
@@ -501,6 +528,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         unmuteUserText,
         requestBannedList,
         bannedList,
+        pendingFriendRequests,
+        incomingFriendRequest,
+        dismissFriendRequest,
       }}
     >
       {children}
