@@ -34,6 +34,21 @@ interface ActiveUser {
 const activeUsers = new Map<string, ActiveUser>(); // socketId -> user
 const pendingSuperAdminNicknames = new Map<string, string>(); // socketId -> pending nickname
 
+// Global presence map: tracks ALL connected users by nickname, regardless of room
+// This is the source of truth for online/offline status on the Friends screen
+const onlinePresence = new Map<string, string>(); // nickname.toLowerCase() -> socketId
+
+export function isUserOnline(nickname: string): boolean {
+  const socketId = onlinePresence.get(nickname.toLowerCase());
+  if (!socketId) return false;
+  // Also check activeUsers as fallback (room members are always online)
+  return true;
+}
+
+export function getOnlineNicknames(): string[] {
+  return Array.from(onlinePresence.keys());
+}
+
 function getRoomUsers(roomId: number) {
   return Array.from(activeUsers.values())
     .filter((u) => u.roomId === roomId)
@@ -61,6 +76,14 @@ export function getActiveUserByNickname(nickname: string): ActiveUser | undefine
   return Array.from(activeUsers.values()).find(
     (u) => u.nickname.toLowerCase() === nickname.toLowerCase()
   );
+}
+
+// Get socket ID for any online user (presence map first, then activeUsers fallback)
+export function getSocketIdByNickname(nickname: string): string | undefined {
+  const presenceSocketId = onlinePresence.get(nickname.toLowerCase());
+  if (presenceSocketId) return presenceSocketId;
+  const activeUser = getActiveUserByNickname(nickname);
+  return activeUser?.socketId;
 }
 
 export function initSocketServer(httpServer: HttpServer) {
@@ -98,6 +121,18 @@ export function initSocketServer(httpServer: HttpServer) {
       "unknown";
 
     console.log(`[Socket] New connection: ${socket.id} from ${ipAddress}`);
+
+    // ── Register presence (called immediately after socket connects, before joining a room) ──
+    socket.on("register_presence", ({ nickname }: { nickname: string }) => {
+      if (!nickname || typeof nickname !== "string") return;
+      const key = nickname.toLowerCase();
+      // Remove any old presence entry for this nickname
+      for (const [k, v] of onlinePresence.entries()) {
+        if (k === key && v !== socket.id) onlinePresence.delete(k);
+      }
+      onlinePresence.set(key, socket.id);
+      console.log(`[Socket] Presence registered: ${nickname} (${socket.id})`);
+    });
 
     // ── Rejoin room (after server restart / reconnect) ──────────────────────
     // Client sends this when socket reconnects and user was already in a room.
@@ -935,6 +970,15 @@ export function initSocketServer(httpServer: HttpServer) {
     socket.on("disconnect", () => {
       // Clean up rate limit tracking for this socket
       socketMessageTimestamps.delete(socket.id);
+
+      // Remove from global presence map
+      for (const [key, sid] of onlinePresence.entries()) {
+        if (sid === socket.id) {
+          onlinePresence.delete(key);
+          break;
+        }
+      }
+
       const user = activeUsers.get(socket.id);
       if (user) {
         activeUsers.delete(socket.id);
@@ -959,9 +1003,10 @@ export function initSocketServer(httpServer: HttpServer) {
             const friendList = await getFriends(offlineNickname);
             for (const friend of friendList) {
               if (friend.status === "accepted") {
-                const friendSocket = getActiveUserByNickname(friend.username);
-                if (friendSocket) {
-                  io.to(friendSocket.socketId).emit("friend_status_changed", { nickname: offlineNickname, isOnline: false });
+                // Use presence map to find friend's socket (works even if not in a room)
+                const friendSocketId = getSocketIdByNickname(friend.username);
+                if (friendSocketId) {
+                  io.to(friendSocketId).emit("friend_status_changed", { nickname: offlineNickname, isOnline: false });
                 }
               }
             }

@@ -100,16 +100,44 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const clearedAtRef = useRef<number>(0);
 
   useEffect(() => {
-    AsyncStorage.getItem("later_nickname").then((n) => {
+    // IMPORTANT: Load cleared-at timestamp FIRST, then create socket.
+    // This prevents the race condition where message_history arrives before
+    // the cleared timestamp is restored, causing cleared messages to reappear.
+    (async () => {
+      // Step 1: Restore nickname first (needed for per-user cleared_at key)
+      const n = await AsyncStorage.getItem("later_nickname");
+
+      // Step 2: Restore cleared-at timestamp (per-user key)
+      if (n) {
+        const ts = await AsyncStorage.getItem(`later_cleared_at_${n.toLowerCase()}`);
+        if (ts) clearedAtRef.current = parseInt(ts, 10);
+      }
       if (n) {
         setNicknameState(n);
         nicknameRef.current = n;
+        // Auto-connect socket so user appears online immediately on app open
+        const apiBase = getApiBaseUrl();
+        if (!socketRef.current?.connected) {
+          const s = io(apiBase, {
+            path: "/api/socket",
+            transports: ["websocket", "polling"],
+            reconnection: true,
+            reconnectionAttempts: 5,
+            reconnectionDelay: 1000,
+          });
+          s.on("connect", () => {
+            s.emit("register_presence", { nickname: n });
+            setIsConnected(true);
+          });
+          s.on("reconnect", () => {
+            s.emit("register_presence", { nickname: nicknameRef.current || n });
+          });
+          setupSocketListeners(s);
+          socketRef.current = s;
+          setSocket(s);
+        }
       }
-    });
-    // Restore cleared-at timestamp so filtered view persists across sign-out/in
-    AsyncStorage.getItem("later_cleared_at").then((ts) => {
-      if (ts) clearedAtRef.current = parseInt(ts, 10);
-    });
+    })();
   }, []);
 
   const setNickname = useCallback((n: string) => {
@@ -376,7 +404,12 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const initSocket = useCallback(() => {
-    if (socketRef.current?.connected) return socketRef.current;
+    if (socketRef.current?.connected) {
+      // Re-register presence in case it was lost (e.g. server restart)
+      const nick = nicknameRef.current;
+      if (nick) socketRef.current.emit("register_presence", { nickname: nick });
+      return socketRef.current;
+    }
 
     const apiBase = getApiBaseUrl();
     const newSocket = io(apiBase, {
@@ -385,6 +418,21 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
+    });
+
+    // Register presence as soon as socket connects (before joining any room)
+    newSocket.on("connect", () => {
+      const nick = nicknameRef.current;
+      if (nick) {
+        newSocket.emit("register_presence", { nickname: nick });
+        console.log(`[Chat] Presence registered for ${nick}`);
+      }
+    });
+
+    // Re-register presence on reconnect
+    newSocket.on("reconnect", () => {
+      const nick = nicknameRef.current;
+      if (nick) newSocket.emit("register_presence", { nickname: nick });
     });
 
     setupSocketListeners(newSocket);
@@ -413,20 +461,25 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     setIsVoiceBanned(false);
     setIsTextMuted(false);
     setMyRole("user");
-
-    const s = initSocket();
     setNickname(nick);
     pendingRoomIdRef.current = rId;
 
-    const doJoin = () => {
-      s.emit("join_room", { nickname: nick, roomId: rId, token });
-    };
+    // Load per-user cleared-at timestamp BEFORE joining room (async IIFE)
+    // The socket join is deferred until after the timestamp is loaded
+    (async () => {
+      const ts = await AsyncStorage.getItem(`later_cleared_at_${nick.toLowerCase()}`);
+      clearedAtRef.current = ts ? parseInt(ts, 10) : 0;
 
-    if (s.connected) {
-      doJoin();
-    } else {
-      s.once("connect", doJoin);
-    }
+      const s = initSocket();
+      const doJoin = () => {
+        s.emit("join_room", { nickname: nick, roomId: rId, token });
+      };
+      if (s.connected) {
+        doJoin();
+      } else {
+        s.once("connect", doJoin);
+      }
+    })();
   }, [initSocket, setNickname]);
 
   const switchRoom = useCallback((newRoomId: number) => {
@@ -462,6 +515,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     setNicknameState(null);
     nicknameRef.current = null;
     AsyncStorage.removeItem("later_nickname").catch(() => {});
+    // Reset cleared-at ref so next login loads fresh from AsyncStorage
+    clearedAtRef.current = 0;
   }, []);
 
   const sendMessage = useCallback((content: string) => {
@@ -493,7 +548,11 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const clearMessages = useCallback(() => {
     const now = Date.now();
     clearedAtRef.current = now;
-    AsyncStorage.setItem("later_cleared_at", String(now)).catch(() => {});
+    // Store per-user so different users on same device don't share cleared state
+    const nick = nicknameRef.current;
+    if (nick) {
+      AsyncStorage.setItem(`later_cleared_at_${nick.toLowerCase()}`, String(now)).catch(() => {});
+    }
     setMessages([]);
   }, []);
 
