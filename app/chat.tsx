@@ -518,8 +518,12 @@ export default function ChatScreen() {
     if (confirmed) unbanUser(targetNickname);
   };
 
+  const isWeb = Platform.OS === "web";
+
   return (
     <ScreenContainer containerClassName="bg-white" className="bg-white" edges={["top", "left", "right"]}>
+      {/* Desktop centering wrapper */}
+      <View style={isWeb ? styles.desktopWrapper : { flex: 1 }}>
       {/* Incoming PM notification banner */}
       {incomingFriendRequest && (
         <View style={[styles.pmBanner, { backgroundColor: "#1565C0" }]}>
@@ -1458,10 +1462,21 @@ export default function ChatScreen() {
           </View>
         </View>
       </Modal>
+      </View>{/* end desktopWrapper */}
     </ScreenContainer> );
 }
 
 const styles = StyleSheet.create({
+  // Desktop centering wrapper
+  desktopWrapper: {
+    flex: 1,
+    maxWidth: 1200,
+    width: "100%",
+    alignSelf: "center",
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: "#E0E0E0",
+  },
   // ── Yahoo Chat latest version header ────────────────────────────────────
   // Row 1: Logo | Room title | Help - Exit
   ymTopBar: {
@@ -1703,7 +1718,7 @@ const styles = StyleSheet.create({
   },
   // Users panel — Latest Yahoo Chat Chatters panel
   usersPanel: {
-    width: 112,
+    width: Platform.OS === "web" ? 160 : 112,
     backgroundColor: "#F5F5F5",
     borderLeftWidth: 1,
     borderLeftColor: "#CCCCCC",

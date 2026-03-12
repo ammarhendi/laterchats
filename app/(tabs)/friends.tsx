@@ -243,6 +243,7 @@ export default function FriendsScreen() {
 
   return (
     <ScreenContainer containerClassName="bg-white">
+      <View style={Platform.OS === "web" ? styles.desktopWrapper : { flex: 1 }}>
       {/* Friends header */}
       <View style={styles.header}>
         {/* Logo bar */}
@@ -580,11 +581,21 @@ export default function FriendsScreen() {
       <View style={styles.copyrightBar}>
         <Text style={styles.copyrightText}>© {new Date().getFullYear()} Later. All rights reserved.</Text>
       </View>
+      </View>{/* end desktopWrapper */}
     </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
+  desktopWrapper: {
+    flex: 1,
+    maxWidth: 900,
+    width: "100%",
+    alignSelf: "center",
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: "#E0E0E0",
+  },
   header: {
     backgroundColor: YM_PURPLE,
     borderBottomWidth: 1,

@@ -366,6 +366,8 @@ export default function WelcomeScreen() {
     <ScreenContainer containerClassName="bg-white" safeAreaClassName="bg-white">
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <ScrollView contentContainerStyle={styles.authScroll} keyboardShouldPersistTaps="handled">
+          {/* Desktop centering wrapper */}
+          <View style={styles.authDesktopWrapper}>
 
           {/* Purple gradient header with logo */}
           <ExpoLinearGradient
@@ -535,6 +537,7 @@ export default function WelcomeScreen() {
             <Text style={styles.ymCopyrightSub}>Later is a registered trademark. Unauthorized reproduction or distribution of this application, or any portion of it, may result in severe civil and criminal penalties.</Text>
           </View>
 
+          </View>{/* end authDesktopWrapper */}
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -647,7 +650,8 @@ export default function WelcomeScreen() {
 
 const styles = StyleSheet.create({
   // Auth screen
-  authScroll: { flexGrow: 1, backgroundColor: YM.offWhite, paddingBottom: 32 },
+  authScroll: { flexGrow: 1, backgroundColor: YM.offWhite, paddingBottom: 32, alignItems: Platform.OS === "web" ? "center" : undefined },
+  authDesktopWrapper: { width: "100%", maxWidth: Platform.OS === "web" ? 480 : undefined, alignSelf: "center" },
 
   // YM Header (purple gradient)
   ymHeader: { alignItems: "center", paddingTop: 40, paddingBottom: 32, gap: 6 },

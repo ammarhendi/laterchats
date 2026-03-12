@@ -257,6 +257,7 @@ export default function ProfileScreen() {
 
   return (
     <ScreenContainer containerClassName="bg-white">
+      <View style={Platform.OS === "web" ? { flex: 1, maxWidth: 720, width: "100%", alignSelf: "center", borderLeftWidth: 1, borderRightWidth: 1, borderColor: "#E0E0E0" } : { flex: 1 }}>
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
         {/* Header */}
         <LinearGradient
@@ -492,6 +493,7 @@ export default function ProfileScreen() {
           </View>
         </View>
       </ScrollView>
+      </View>
     </ScreenContainer>
   );
 }
